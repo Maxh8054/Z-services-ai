@@ -805,7 +805,20 @@ function PhotoEditor({
 
   const handleSave = () => {
     const embeddedPhotos: EmbeddedPhoto[] = objects.filter(obj => obj.type === 'circleWithPhoto' && obj.imageData).map(obj => ({ id: obj.id, circleX: obj.x, circleY: obj.y, circleRadius: obj.radius || 50, imageData: obj.imageData! }));
-    onSave({ embeddedPhotos });
+    
+    // Exportar canvas como imagem editada
+    const canvas = canvasRef.current;
+    if (canvas) {
+      try {
+        const editedImageData = canvas.toDataURL('image/png');
+        onSave({ embeddedPhotos, editedImageData });
+      } catch (error) {
+        console.error('Error exporting canvas:', error);
+        onSave({ embeddedPhotos });
+      }
+    } else {
+      onSave({ embeddedPhotos });
+    }
     onClose();
   };
 

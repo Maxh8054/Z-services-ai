@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { db } from '@/lib/db';
 
 // Gerar ID único simples
 function generateId(length: number): string {
@@ -11,12 +12,6 @@ function generateId(length: number): string {
 }
 
 // Interface para sessões
-interface SessionUser {
-  id: string;
-  joinedAt: number;
-  lastSeen: number;
-}
-
 interface SessionUpdate {
   userId: string;
   type: 'full' | 'field';
@@ -26,57 +21,8 @@ interface SessionUpdate {
   timestamp: number;
 }
 
-interface Session {
-  id: string;
-  createdAt: number;
-  data: any;
-  users: Map<string, SessionUser>;
-  updates: SessionUpdate[];
-  lastUpdated: number;
-}
-
-// Armazenamento temporário de sessões (em memória)
-// NOTA: Em produção no Render, usar banco de dados (Prisma com SQLite/PostgreSQL)
-// pois a memória é perdida em cold starts
-const sessionsStore = new Map<string, Session>();
-
-// Limpar sessões antigas (mais de 24 horas)
-function cleanOldSessions() {
-  const now = Date.now();
-  const maxAge = 24 * 60 * 60 * 1000; // 24 horas
-
-  sessionsStore.forEach((session, id) => {
-    if (now - session.createdAt > maxAge) {
-      sessionsStore.delete(id);
-    }
-  });
-}
-
-// Limpar usuários inativos (mais de 5 minutos)
-function cleanInactiveUsers(session: Session) {
-  const now = Date.now();
-  const maxInactive = 5 * 60 * 1000; // 5 minutos
-
-  session.users.forEach((user, id) => {
-    if (now - user.lastSeen > maxInactive) {
-      session.users.delete(id);
-    }
-  });
-}
-
-// Limpar atualizações antigas (mais de 5 minutos)
-function cleanOldUpdates(session: Session) {
-  const now = Date.now();
-  const maxAge = 5 * 60 * 1000; // 5 minutos
-
-  session.updates = session.updates.filter(u => now - u.timestamp < maxAge);
-}
-
 export async function POST(request: NextRequest) {
   try {
-    // Limpar sessões antigas periodicamente
-    cleanOldSessions();
-
     const body = await request.json();
     const { action, sessionId, userId, data, type, field, value, timestamp, lastUpdate, initialData } = body;
 
@@ -89,18 +35,25 @@ export async function POST(request: NextRequest) {
           : '';
         const shareLink = `${baseUrl}/report/${newSessionId}`;
 
-        const newSession: Session = {
-          id: newSessionId,
-          createdAt: Date.now(),
-          data: data || null,
-          users: new Map(),
-          updates: [],
-          lastUpdated: Date.now(),
-        };
+        // Salvar no banco de dados como SharedSession
+        await db.sharedSession.create({
+          data: {
+            sessionId: newSessionId,
+            creatorId: userId || 'collaboration',
+            creatorName: 'Collaboration Session',
+            reportType: 'collaboration',
+            permission: 'edit',
+            data: JSON.stringify({
+              data: data || null,
+              users: {},
+              updates: [],
+              lastUpdated: Date.now(),
+            }),
+            expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000), // 24 horas
+          },
+        });
 
-        sessionsStore.set(newSessionId, newSession);
-
-        console.log(`[Collaboration] Created session ${newSessionId}, total sessions: ${sessionsStore.size}`);
+        console.log(`[Collaboration] Created session ${newSessionId}`);
 
         return NextResponse.json({
           success: true,
@@ -111,7 +64,9 @@ export async function POST(request: NextRequest) {
 
       case 'join': {
         // Entrar na sessão
-        const session = sessionsStore.get(sessionId);
+        const session = await db.sharedSession.findUnique({
+          where: { sessionId },
+        });
 
         if (!session) {
           return NextResponse.json({
@@ -120,33 +75,56 @@ export async function POST(request: NextRequest) {
           }, { status: 404 });
         }
 
+        // Parse session data
+        const sessionData = JSON.parse(session.data || '{}');
+        
         // Adicionar usuário
-        session.users.set(userId, {
+        if (!sessionData.users) sessionData.users = {};
+        sessionData.users[userId] = {
           id: userId,
           joinedAt: Date.now(),
           lastSeen: Date.now(),
-        });
+        };
 
         // Se tem dados iniciais, atualizar
         if (initialData) {
-          session.data = initialData;
-          session.lastUpdated = Date.now();
+          sessionData.data = initialData;
+          sessionData.lastUpdated = Date.now();
         }
+
+        // Salvar no banco
+        await db.sharedSession.update({
+          where: { sessionId },
+          data: {
+            data: JSON.stringify(sessionData),
+          },
+        });
+
+        const userCount = Object.keys(sessionData.users).length;
 
         return NextResponse.json({
           success: true,
-          sessionId: session.id,
-          data: session.data,
-          userCount: session.users.size,
+          sessionId: session.sessionId,
+          data: sessionData.data,
+          userCount,
         });
       }
 
       case 'leave': {
         // Sair da sessão
-        const session = sessionsStore.get(sessionId);
+        const session = await db.sharedSession.findUnique({
+          where: { sessionId },
+        });
 
         if (session && userId) {
-          session.users.delete(userId);
+          const sessionData = JSON.parse(session.data || '{}');
+          if (sessionData.users && sessionData.users[userId]) {
+            delete sessionData.users[userId];
+            await db.sharedSession.update({
+              where: { sessionId },
+              data: { data: JSON.stringify(sessionData) },
+            });
+          }
         }
 
         return NextResponse.json({
@@ -156,7 +134,9 @@ export async function POST(request: NextRequest) {
 
       case 'poll': {
         // Polling para atualizações
-        const session = sessionsStore.get(sessionId);
+        const session = await db.sharedSession.findUnique({
+          where: { sessionId },
+        });
 
         if (!session) {
           return NextResponse.json({
@@ -165,30 +145,53 @@ export async function POST(request: NextRequest) {
           }, { status: 404 });
         }
 
+        const sessionData = JSON.parse(session.data || '{}');
+
         // Atualizar lastSeen do usuário
-        if (userId && session.users.has(userId)) {
-          const user = session.users.get(userId)!;
-          user.lastSeen = Date.now();
+        if (userId && sessionData.users && sessionData.users[userId]) {
+          sessionData.users[userId].lastSeen = Date.now();
         }
 
-        // Limpar usuários e atualizações antigas
-        cleanInactiveUsers(session);
-        cleanOldUpdates(session);
+        // Limpar usuários inativos (mais de 5 minutos)
+        const now = Date.now();
+        const maxInactive = 5 * 60 * 1000;
+        if (sessionData.users) {
+          Object.keys(sessionData.users).forEach((id: string) => {
+            if (now - sessionData.users[id].lastSeen > maxInactive) {
+              delete sessionData.users[id];
+            }
+          });
+        }
+
+        // Limpar atualizações antigas (mais de 5 minutos)
+        if (sessionData.updates) {
+          sessionData.updates = sessionData.updates.filter((u: SessionUpdate) => now - u.timestamp < maxInactive);
+        }
 
         // Filtrar atualizações desde o último timestamp
-        const newUpdates = session.updates.filter(u => u.timestamp > (lastUpdate || 0));
+        const newUpdates = (sessionData.updates || []).filter((u: SessionUpdate) => u.timestamp > (lastUpdate || 0));
+
+        // Salvar alterações
+        await db.sharedSession.update({
+          where: { sessionId },
+          data: { data: JSON.stringify(sessionData) },
+        });
+
+        const userCount = Object.keys(sessionData.users || {}).length;
 
         return NextResponse.json({
           success: true,
           updates: newUpdates,
-          userCount: session.users.size,
+          userCount,
           timestamp: Date.now(),
         });
       }
 
       case 'update': {
         // Enviar atualização
-        const session = sessionsStore.get(sessionId);
+        const session = await db.sharedSession.findUnique({
+          where: { sessionId },
+        });
 
         if (!session) {
           return NextResponse.json({
@@ -196,6 +199,8 @@ export async function POST(request: NextRequest) {
             error: 'Session not found',
           }, { status: 404 });
         }
+
+        const sessionData = JSON.parse(session.data || '{}');
 
         const update: SessionUpdate = {
           userId,
@@ -209,14 +214,22 @@ export async function POST(request: NextRequest) {
         } else {
           update.data = data;
           // Atualizar dados da sessão
-          session.data = data;
+          sessionData.data = data;
         }
 
-        session.updates.push(update);
-        session.lastUpdated = Date.now();
+        if (!sessionData.updates) sessionData.updates = [];
+        sessionData.updates.push(update);
+        sessionData.lastUpdated = Date.now();
 
         // Limpar atualizações antigas
-        cleanOldUpdates(session);
+        const now = Date.now();
+        sessionData.updates = sessionData.updates.filter((u: SessionUpdate) => now - u.timestamp < 5 * 60 * 1000);
+
+        // Salvar no banco
+        await db.sharedSession.update({
+          where: { sessionId },
+          data: { data: JSON.stringify(sessionData) },
+        });
 
         return NextResponse.json({
           success: true,
@@ -225,9 +238,11 @@ export async function POST(request: NextRequest) {
 
       case 'get': {
         // Obter dados da sessão
-        const session = sessionsStore.get(sessionId);
+        const session = await db.sharedSession.findUnique({
+          where: { sessionId },
+        });
 
-        console.log(`[Collaboration] Get session ${sessionId}, found: ${!!session}, total sessions: ${sessionsStore.size}`);
+        console.log(`[Collaboration] Get session ${sessionId}, found: ${!!session}`);
 
         if (!session) {
           return NextResponse.json({
@@ -236,17 +251,22 @@ export async function POST(request: NextRequest) {
           }, { status: 404 });
         }
 
+        const sessionData = JSON.parse(session.data || '{}');
+        const userCount = Object.keys(sessionData.users || {}).length;
+
         return NextResponse.json({
           success: true,
-          data: session.data,
-          userCount: session.users.size,
-          sessionId: session.id,
+          data: sessionData.data,
+          userCount,
+          sessionId: session.sessionId,
         });
       }
 
       case 'delete': {
         // Deletar sessão
-        sessionsStore.delete(sessionId);
+        await db.sharedSession.delete({
+          where: { sessionId },
+        }).catch(() => {}); // Ignorar se não existir
 
         return NextResponse.json({
           success: true,
@@ -279,7 +299,9 @@ export async function GET(request: NextRequest) {
     }, { status: 400 });
   }
 
-  const session = sessionsStore.get(sessionId);
+  const session = await db.sharedSession.findUnique({
+    where: { sessionId },
+  });
 
   if (!session) {
     return NextResponse.json({
@@ -288,11 +310,13 @@ export async function GET(request: NextRequest) {
     });
   }
 
+  const sessionData = JSON.parse(session.data || '{}');
+
   return NextResponse.json({
     success: true,
     exists: true,
-    createdAt: session.createdAt,
-    lastUpdated: session.lastUpdated,
-    userCount: session.users.size,
+    createdAt: session.createdAt.getTime(),
+    lastUpdated: sessionData.lastUpdated || session.updatedAt.getTime(),
+    userCount: Object.keys(sessionData.users || {}).length,
   });
 }
