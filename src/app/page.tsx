@@ -2929,6 +2929,10 @@ export default function TechnicalReportPage() {
     };
   }, []);
   
+  // Referência para o timestamp de sincronização (compartilhada entre sync e polling)
+  const lastSyncTimestampRef = useRef<number>(Date.now());
+  const lastAppliedTimestampRef = useRef<number>(0);
+  
   // Sincronizar mudanças do store para a sessão compartilhada
   const syncTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   
@@ -2950,6 +2954,7 @@ export default function TechnicalReportPage() {
       if (data.inspection?.tag || data.inspection?.cliente || data.conclusion || 
           (data.categories && data.categories.some((c: any) => c.photos?.length > 0))) {
         try {
+          const now = Date.now();
           await fetch('/api/share', {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
@@ -2959,10 +2964,13 @@ export default function TechnicalReportPage() {
               data: {
                 ...data,
                 lastModifiedBy: session?.user?.name || 'Usuário',
-                lastModifiedAt: new Date().toISOString(),
+                lastModifiedAt: new Date(now).toISOString(),
               }
             }),
           });
+          // Atualizar timestamp local para evitar sobrescrever nossas próprias mudanças
+          lastSyncTimestampRef.current = now;
+          lastAppliedTimestampRef.current = now;
         } catch (error) {
           // Ignorar erros de rede silenciosamente
           if (error instanceof TypeError && error.message.includes('fetch')) {
@@ -3013,12 +3021,16 @@ export default function TechnicalReportPage() {
           const serverData = result.session.data;
           const reportType = activeSharedSession.reportType;
           
-          // Verificar se os dados do servidor são mais recentes
+          // Verificar se os dados do servidor são mais recentes que o último aplicado
           if (serverData.lastModifiedAt) {
             const serverTime = new Date(serverData.lastModifiedAt).getTime();
-            const localTime = Date.now() - 2000; // 2 segundos de tolerância
             
-            if (serverTime > localTime) {
+            // Só atualiza se o servidor tem dados mais recentes que o último que aplicamos
+            // E não somos nós que modificamos (verifica pelo lastModifiedBy)
+            if (serverTime > lastAppliedTimestampRef.current) {
+              // Atualizar o timestamp de controle
+              lastAppliedTimestampRef.current = serverTime;
+              
               // Atualizar store com dados do servidor
               if (reportType === 'home') {
                 homeStore.loadFromData({
@@ -3043,7 +3055,7 @@ export default function TechnicalReportPage() {
         }
         console.error('Polling error:', error);
       }
-    }, 3000); // A cada 3 segundos
+    }, 2000); // A cada 2 segundos para melhor responsividade
     
     return () => clearInterval(pollInterval);
   }, [activeSharedSession, homeStore, inspecaoStore, session]);

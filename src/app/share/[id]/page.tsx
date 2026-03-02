@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -68,6 +68,9 @@ export default function SharedReportPage() {
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
   const [downloadingJson, setDownloadingJson] = useState(false);
   const [downloadingPpt, setDownloadingPpt] = useState(false);
+  
+  // Rastrear último timestamp para evitar sobrescrever mudanças locais
+  const lastServerTimestampRef = useRef<number>(0);
 
   // Carregar sessão compartilhada
   const loadSession = useCallback(async () => {
@@ -82,6 +85,10 @@ export default function SharedReportPage() {
         setEditedData(result.session.data);
         setLastSync(new Date());
         setIsConnected(true);
+        // Atualizar timestamp do servidor
+        if (result.session.data?.lastModifiedAt) {
+          lastServerTimestampRef.current = new Date(result.session.data.lastModifiedAt).getTime();
+        }
       } else {
         setError(result.error || 'Sessão não encontrada');
       }
@@ -106,10 +113,19 @@ export default function SharedReportPage() {
         const result = await response.json();
 
         if (result.success) {
-          setSharedSession(result.session);
-          // Só atualiza se não estiver salvando
-          if (!saving) {
-            setEditedData(result.session.data);
+          const serverData = result.session.data;
+          const serverTime = serverData?.lastModifiedAt 
+            ? new Date(serverData.lastModifiedAt).getTime() 
+            : 0;
+          
+          // Só atualiza se o servidor tem dados mais recentes
+          if (serverTime > lastServerTimestampRef.current) {
+            setSharedSession(result.session);
+            // Só atualiza se não estiver salvando
+            if (!saving) {
+              setEditedData(serverData);
+            }
+            lastServerTimestampRef.current = serverTime;
           }
           setLastSync(new Date());
           setIsConnected(true);
@@ -135,6 +151,7 @@ export default function SharedReportPage() {
 
     setSaving(true);
     try {
+      const now = Date.now();
       const response = await fetch('/api/share', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
@@ -144,10 +161,12 @@ export default function SharedReportPage() {
           data: {
             ...editedData,
             lastModifiedBy: session?.user?.name || 'Usuário',
-            lastModifiedAt: new Date().toISOString(),
+            lastModifiedAt: new Date(now).toISOString(),
           }
         }),
       });
+      // Atualizar timestamp local para evitar sobrescrever nossas mudanças
+      lastServerTimestampRef.current = now;
       setLastSync(new Date());
     } catch (err) {
       console.error('Save error:', err);

@@ -194,6 +194,26 @@ function getUserPrompt(text: string, language: Language): string {
   return prompts[language];
 }
 
+// Cache para a instância do ZAI
+let zaiInstance: any = null;
+let zaiInitPromise: Promise<any> | null = null;
+
+async function getZAI() {
+  if (zaiInstance) return zaiInstance;
+  
+  if (zaiInitPromise) return zaiInitPromise;
+  
+  zaiInitPromise = (async () => {
+    console.log('[SpellCheck] Initializing ZAI SDK...');
+    const ZAI = await import('z-ai-web-dev-sdk').then(m => m.default || m);
+    zaiInstance = await ZAI.create();
+    console.log('[SpellCheck] ZAI SDK initialized successfully');
+    return zaiInstance;
+  })();
+  
+  return zaiInitPromise;
+}
+
 // Função principal para verificação ortográfica
 async function checkSpellingWithLLM(text: string, language: Language): Promise<SpellError[]> {
   console.log('[SpellCheck] Starting spell check for language:', language);
@@ -202,12 +222,8 @@ async function checkSpellingWithLLM(text: string, language: Language): Promise<S
   try {
     // Tentar usar z-ai-web-dev-sdk
     try {
-      console.log('[SpellCheck] Attempting to load z-ai-web-dev-sdk...');
-      const ZAI = await import('z-ai-web-dev-sdk').then(m => m.default || m);
-      console.log('[SpellCheck] SDK loaded, creating instance...');
-      
-      const zai = await ZAI.create();
-      console.log('[SpellCheck] SDK instance created, sending request...');
+      const zai = await getZAI();
+      console.log('[SpellCheck] Sending request to LLM...');
       
       const completion = await zai.chat.completions.create({
         messages: [
@@ -239,10 +255,12 @@ async function checkSpellingWithLLM(text: string, language: Language): Promise<S
           }
         } else {
           console.log('[SpellCheck] No JSON found in response');
+          console.log('[SpellCheck] Response preview:', response.substring(0, 200));
         }
       }
     } catch (sdkError: any) {
       console.error('[SpellCheck] SDK error:', sdkError?.message || sdkError);
+      console.error('[SpellCheck] SDK error stack:', sdkError?.stack);
       // Continue to fallback
     }
 
