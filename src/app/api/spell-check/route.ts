@@ -196,19 +196,18 @@ function getUserPrompt(text: string, language: Language): string {
 
 // Função principal para verificação ortográfica
 async function checkSpellingWithLLM(text: string, language: Language): Promise<SpellError[]> {
+  console.log('[SpellCheck] Starting spell check for language:', language);
+  console.log('[SpellCheck] Text length:', text.length);
+  
   try {
-    // Usar fetch direto para a API de LLM
-    const apiKey = process.env.Z_AI_API_KEY || process.env.OPENAI_API_KEY;
-    
-    if (!apiKey) {
-      console.log('[SpellCheck] No API key found, skipping spell check');
-      return [];
-    }
-
-    // Tentar usar z-ai-web-dev-sdk primeiro
+    // Tentar usar z-ai-web-dev-sdk
     try {
+      console.log('[SpellCheck] Attempting to load z-ai-web-dev-sdk...');
       const ZAI = await import('z-ai-web-dev-sdk').then(m => m.default || m);
+      console.log('[SpellCheck] SDK loaded, creating instance...');
+      
       const zai = await ZAI.create();
+      console.log('[SpellCheck] SDK instance created, sending request...');
       
       const completion = await zai.chat.completions.create({
         messages: [
@@ -225,22 +224,33 @@ async function checkSpellingWithLLM(text: string, language: Language): Promise<S
       });
 
       const response = completion.choices[0]?.message?.content;
+      console.log('[SpellCheck] Got response from LLM, length:', response?.length || 0);
 
       if (response) {
+        // Try to extract JSON from the response
         const jsonMatch = response.match(/\{[\s\S]*"errors"[\s\S]*\}/);
         if (jsonMatch) {
-          const parsed = JSON.parse(jsonMatch[0]);
-          return parsed.errors || [];
+          try {
+            const parsed = JSON.parse(jsonMatch[0]);
+            console.log('[SpellCheck] Parsed errors:', parsed.errors?.length || 0);
+            return parsed.errors || [];
+          } catch (parseError) {
+            console.error('[SpellCheck] Failed to parse JSON:', parseError);
+          }
+        } else {
+          console.log('[SpellCheck] No JSON found in response');
         }
       }
-    } catch (sdkError) {
-      console.log('[SpellCheck] SDK error, using fallback:', sdkError);
+    } catch (sdkError: any) {
+      console.error('[SpellCheck] SDK error:', sdkError?.message || sdkError);
+      // Continue to fallback
     }
 
     // Fallback: retornar array vazio
+    console.log('[SpellCheck] Returning empty errors (fallback)');
     return [];
-  } catch (error) {
-    console.error('[SpellCheck] Error:', error);
+  } catch (error: any) {
+    console.error('[SpellCheck] Error:', error?.message || error);
     return [];
   }
 }
@@ -249,7 +259,13 @@ export async function POST(request: NextRequest) {
   try {
     const { text, language = 'pt' } = await request.json();
 
+    console.log('[SpellCheck POST] Received request:', { 
+      textLength: text?.length, 
+      language 
+    });
+
     if (!text || text.trim().length === 0) {
+      console.log('[SpellCheck POST] Empty text, returning empty errors');
       return NextResponse.json({ errors: [] });
     }
 
@@ -258,10 +274,11 @@ export async function POST(request: NextRequest) {
     // Verificar spell check
     const errors = await checkSpellingWithLLM(text, validLanguage);
 
+    console.log('[SpellCheck POST] Returning', errors.length, 'errors');
     return NextResponse.json({ errors });
 
-  } catch (error) {
-    console.error('Spell check error:', error);
+  } catch (error: any) {
+    console.error('[SpellCheck POST] Error:', error?.message || error);
     // Return empty errors instead of error response to not break the UI
     return NextResponse.json({ errors: [] });
   }
@@ -271,6 +288,7 @@ export async function POST(request: NextRequest) {
 export async function GET() {
   return NextResponse.json({ 
     status: 'ok',
-    message: 'Spell check service is available'
+    message: 'Spell check service is available',
+    timestamp: new Date().toISOString()
   });
 }
