@@ -3021,32 +3021,28 @@ export default function TechnicalReportPage() {
           const serverData = result.session.data;
           const reportType = activeSharedSession.reportType;
           
-          // Verificar se os dados do servidor são mais recentes que o último aplicado
-          if (serverData.lastModifiedAt) {
-            const serverTime = new Date(serverData.lastModifiedAt).getTime();
-            
-            // Só atualiza se o servidor tem dados mais recentes que o último que aplicamos
-            // E não somos nós que modificamos (verifica pelo lastModifiedBy)
-            if (serverTime > lastAppliedTimestampRef.current) {
-              // Atualizar o timestamp de controle
-              lastAppliedTimestampRef.current = serverTime;
-              
-              // Atualizar store com dados do servidor
-              if (reportType === 'home') {
-                homeStore.loadFromData({
-                  inspection: serverData.inspection,
-                  categories: serverData.categories,
-                  conclusion: serverData.conclusion,
-                });
-              } else {
-                inspecaoStore.loadFromData({
-                  inspection: serverData.inspection,
-                  photos: serverData.photos,
-                  conclusion: serverData.conclusion,
-                });
-              }
-            }
+          // Obter timestamp do servidor
+          const serverTimestamp = serverData.lastModifiedAt 
+            ? new Date(serverData.lastModifiedAt).getTime() 
+            : Date.now();
+          
+          // Usar merge inteligente para atualizar dados
+          if (reportType === 'home') {
+            homeStore.mergeFromData({
+              inspection: serverData.inspection,
+              categories: serverData.categories,
+              conclusion: serverData.conclusion,
+            }, serverTimestamp);
+          } else {
+            inspecaoStore.mergeFromData({
+              inspection: serverData.inspection,
+              photos: serverData.photos,
+              conclusion: serverData.conclusion,
+            }, serverTimestamp);
           }
+          
+          // Atualizar timestamp de controle
+          lastAppliedTimestampRef.current = serverTimestamp;
         }
       } catch (error) {
         // Ignorar erros de rede silenciosamente

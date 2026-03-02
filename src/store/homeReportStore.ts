@@ -4,7 +4,7 @@ import type { InspectionData, PhotoData, AdditionalPart, PhotoCategory } from '@
 import { DEFAULT_CATEGORIES } from '@/types/report';
 
 // Versão do storage - incrementar quando mudar a estrutura das categorias
-const STORAGE_VERSION = 2;
+const STORAGE_VERSION = 3;
 
 // Criar fotos iniciais para uma categoria (2 fotos por padrão)
 const createInitialCategoryPhotos = (categoryId: string): PhotoData[] => {
@@ -35,6 +35,60 @@ const createInitialCategories = (): PhotoCategory[] => {
 // IDs válidos de categorias
 const VALID_CATEGORY_IDS = DEFAULT_CATEGORIES.map(c => c.id);
 
+// Função auxiliar para fazer merge de fotos
+function mergePhotos(localPhotos: PhotoData[], serverPhotos: PhotoData[]): PhotoData[] {
+  if (!serverPhotos || serverPhotos.length === 0) return localPhotos;
+  if (!localPhotos || localPhotos.length === 0) return serverPhotos;
+  
+  const merged: PhotoData[] = [];
+  const maxLen = Math.max(localPhotos.length, serverPhotos.length);
+  
+  for (let i = 0; i < maxLen; i++) {
+    const local = localPhotos[i];
+    const server = serverPhotos[i];
+    
+    if (!local && server) {
+      merged.push(server);
+    } else if (local && !server) {
+      merged.push(local);
+    } else if (local && server) {
+      // Merge campo por campo - servidor tem prioridade se tiver dados
+      merged.push({
+        id: server.id || local.id,
+        description: server.description || local.description || '',
+        pn: server.pn || local.pn || '',
+        serialNumber: server.serialNumber || local.serialNumber || '',
+        partName: server.partName || local.partName || '',
+        quantity: server.quantity || local.quantity || '',
+        criticality: server.criticality || local.criticality || '',
+        imageData: server.imageData || local.imageData,
+        editedImageData: server.editedImageData || local.editedImageData,
+        embeddedPhotos: server.embeddedPhotos?.length ? server.embeddedPhotos : local.embeddedPhotos || [],
+        hasAdditionalParts: server.hasAdditionalParts || local.hasAdditionalParts,
+      });
+    }
+  }
+  
+  return merged;
+}
+
+// Função auxiliar para fazer merge de categorias
+function mergeCategories(localCats: PhotoCategory[], serverCats: PhotoCategory[]): PhotoCategory[] {
+  if (!serverCats || serverCats.length === 0) return localCats;
+  if (!localCats || localCats.length === 0) return serverCats;
+  
+  return serverCats.map(serverCat => {
+    const localCat = localCats.find(c => c.id === serverCat.id);
+    if (!localCat) return serverCat;
+    
+    return {
+      ...serverCat,
+      photos: mergePhotos(localCat.photos, serverCat.photos),
+      additionalParts: serverCat.additionalParts?.length ? serverCat.additionalParts : localCat.additionalParts || [],
+    };
+  });
+}
+
 interface HomeReportState {
   // Inspection Data
   inspection: InspectionData;
@@ -44,6 +98,9 @@ interface HomeReportState {
   
   // Conclusion
   conclusion: string;
+  
+  // Timestamp da última edição local
+  lastLocalEdit: number;
   
   // Actions
   updateInspection: (data: Partial<InspectionData>) => void;
@@ -63,7 +120,9 @@ interface HomeReportState {
   
   // External data loading
   loadFromData: (data: { inspection?: Partial<InspectionData>; categories?: PhotoCategory[]; conclusion?: string }) => void;
+  mergeFromData: (data: { inspection?: Partial<InspectionData>; categories?: PhotoCategory[]; conclusion?: string }, serverTimestamp?: number) => void;
   getAllData: () => { inspection: InspectionData; categories: PhotoCategory[]; conclusion: string };
+  setLastLocalEdit: (timestamp: number) => void;
 }
 
 const initialInspection: InspectionData = {
@@ -90,13 +149,17 @@ export const useHomeReportStore = create<HomeReportState>()(
       inspection: initialInspection,
       categories: createInitialCategories(),
       conclusion: '',
+      lastLocalEdit: 0,
+      
+      setLastLocalEdit: (timestamp) => set({ lastLocalEdit: timestamp }),
       
       updateInspection: (data) =>
         set((state) => ({
           inspection: { ...state.inspection, ...data },
+          lastLocalEdit: Date.now(),
         })),
       
-      setCategories: (categories) => set({ categories }),
+      setCategories: (categories) => set({ categories, lastLocalEdit: Date.now() }),
       
       addPhotoToCategory: (categoryId) =>
         set((state) => ({
@@ -122,6 +185,7 @@ export const useHomeReportStore = create<HomeReportState>()(
               ],
             };
           }),
+          lastLocalEdit: Date.now(),
         })),
       
       removePhotoFromCategory: (categoryId, photoId) =>
@@ -133,6 +197,7 @@ export const useHomeReportStore = create<HomeReportState>()(
               photos: cat.photos.filter(p => p.id !== photoId),
             };
           }),
+          lastLocalEdit: Date.now(),
         })),
       
       updatePhotoInCategory: (categoryId, photoId, data) =>
@@ -146,6 +211,7 @@ export const useHomeReportStore = create<HomeReportState>()(
               ),
             };
           }),
+          lastLocalEdit: Date.now(),
         })),
       
       addAdditionalPartToCategory: (categoryId, part) =>
@@ -157,6 +223,7 @@ export const useHomeReportStore = create<HomeReportState>()(
               additionalParts: [...cat.additionalParts, part],
             };
           }),
+          lastLocalEdit: Date.now(),
         })),
       
       removeAdditionalPartFromCategory: (categoryId, partId) =>
@@ -168,16 +235,67 @@ export const useHomeReportStore = create<HomeReportState>()(
               additionalParts: cat.additionalParts.filter(p => p.id !== partId),
             };
           }),
+          lastLocalEdit: Date.now(),
         })),
       
-      setConclusion: (text) => set({ conclusion: text }),
+      setConclusion: (text) => set({ conclusion: text, lastLocalEdit: Date.now() }),
       
-      // Load from external data (shared session)
+      // Load from external data (shared session) - substitui tudo
       loadFromData: (data: { inspection?: Partial<InspectionData>; categories?: PhotoCategory[]; conclusion?: string }) =>
         set({
           inspection: data.inspection ? { ...initialInspection, ...data.inspection } : initialInspection,
           categories: data.categories || createInitialCategories(),
           conclusion: data.conclusion || '',
+        }),
+      
+      // Merge inteligente - preserva dados locais mais recentes
+      mergeFromData: (data: { inspection?: Partial<InspectionData>; categories?: PhotoCategory[]; conclusion?: string }, serverTimestamp?: number) =>
+        set((state) => {
+          const localEditTime = state.lastLocalEdit || 0;
+          const serverTime = serverTimestamp || Date.now();
+          
+          // Se edição local é mais recente que o servidor, não atualizar
+          // (o sync local vai enviar as mudanças para o servidor)
+          if (localEditTime > serverTime && localEditTime > 0) {
+            console.log('[Merge] Local edit is newer, skipping merge');
+            return {};
+          }
+          
+          const newInspection = { ...state.inspection };
+          
+          // Merge campo por campo da inspeção
+          if (data.inspection) {
+            Object.keys(data.inspection).forEach((key) => {
+              const k = key as keyof InspectionData;
+              const serverValue = data.inspection![k];
+              const localValue = state.inspection[k];
+              
+              // Se servidor tem valor e local não tem (ou é vazio), usa servidor
+              if (serverValue && (!localValue || localValue === '')) {
+                (newInspection as any)[k] = serverValue;
+              }
+              // Se servidor tem valor mais recente, usa servidor
+              else if (serverValue && serverTime > localEditTime) {
+                (newInspection as any)[k] = serverValue;
+              }
+            });
+          }
+          
+          // Merge das categorias
+          const newCategories = data.categories 
+            ? mergeCategories(state.categories, data.categories)
+            : state.categories;
+          
+          // Merge da conclusão
+          const newConclusion = (data.conclusion && (!state.conclusion || serverTime > localEditTime))
+            ? data.conclusion
+            : state.conclusion;
+          
+          return {
+            inspection: newInspection,
+            categories: newCategories,
+            conclusion: newConclusion,
+          };
         }),
       
       // Get all data for sharing
@@ -192,6 +310,7 @@ export const useHomeReportStore = create<HomeReportState>()(
           inspection: initialInspection,
           categories: createInitialCategories(),
           conclusion: '',
+          lastLocalEdit: 0,
         }),
     }),
     {

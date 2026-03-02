@@ -2,6 +2,43 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type { InspectionData, PhotoData, AdditionalPart } from '@/types/report';
 
+// Função auxiliar para fazer merge de fotos
+function mergePhotos(localPhotos: PhotoData[], serverPhotos: PhotoData[]): PhotoData[] {
+  if (!serverPhotos || serverPhotos.length === 0) return localPhotos;
+  if (!localPhotos || localPhotos.length === 0) return serverPhotos;
+  
+  const merged: PhotoData[] = [];
+  const maxLen = Math.max(localPhotos.length, serverPhotos.length);
+  
+  for (let i = 0; i < maxLen; i++) {
+    const local = localPhotos[i];
+    const server = serverPhotos[i];
+    
+    if (!local && server) {
+      merged.push(server);
+    } else if (local && !server) {
+      merged.push(local);
+    } else if (local && server) {
+      // Merge campo por campo - servidor tem prioridade se tiver dados
+      merged.push({
+        id: server.id || local.id,
+        description: server.description || local.description || '',
+        pn: server.pn || local.pn || '',
+        serialNumber: server.serialNumber || local.serialNumber || '',
+        partName: server.partName || local.partName || '',
+        quantity: server.quantity || local.quantity || '',
+        criticality: server.criticality || local.criticality || '',
+        imageData: server.imageData || local.imageData,
+        editedImageData: server.editedImageData || local.editedImageData,
+        embeddedPhotos: server.embeddedPhotos?.length ? server.embeddedPhotos : local.embeddedPhotos || [],
+        hasAdditionalParts: server.hasAdditionalParts || local.hasAdditionalParts,
+      });
+    }
+  }
+  
+  return merged;
+}
+
 interface ReportState {
   // Inspection Data
   inspection: InspectionData;
@@ -23,6 +60,9 @@ interface ReportState {
     translations: Record<string, string>;
   } | null;
   
+  // Timestamp da última edição local
+  lastLocalEdit: number;
+  
   // Actions
   updateInspection: (data: Partial<InspectionData>) => void;
   setPhotos: (photos: PhotoData[]) => void;
@@ -40,7 +80,9 @@ interface ReportState {
   
   // External data loading
   loadFromData: (data: { inspection?: Partial<InspectionData>; photos?: PhotoData[]; conclusion?: string }) => void;
+  mergeFromData: (data: { inspection?: Partial<InspectionData>; photos?: PhotoData[]; conclusion?: string }, serverTimestamp?: number) => void;
   getAllData: () => { inspection: InspectionData; photos: PhotoData[]; conclusion: string };
+  setLastLocalEdit: (timestamp: number) => void;
 }
 
 const initialInspection: InspectionData = {
@@ -86,13 +128,17 @@ export const useReportStore = create<ReportState>()(
       additionalParts: [],
       conclusion: '',
       translation: null,
+      lastLocalEdit: 0,
+      
+      setLastLocalEdit: (timestamp) => set({ lastLocalEdit: timestamp }),
       
       updateInspection: (data) =>
         set((state) => ({
           inspection: { ...state.inspection, ...data },
+          lastLocalEdit: Date.now(),
         })),
         
-      setPhotos: (photos) => set({ photos }),
+      setPhotos: (photos) => set({ photos, lastLocalEdit: Date.now() }),
       
       addPhoto: () =>
         set((state) => ({
@@ -113,12 +159,14 @@ export const useReportStore = create<ReportState>()(
             },
           ],
           photoCount: state.photoCount + 1,
+          lastLocalEdit: Date.now(),
         })),
         
       removePhoto: (id) =>
         set((state) => ({
           photos: state.photos.filter((p) => p.id !== id),
           photoCount: state.photoCount - 1,
+          lastLocalEdit: Date.now(),
         })),
         
       updatePhoto: (id, data) =>
@@ -126,6 +174,7 @@ export const useReportStore = create<ReportState>()(
           photos: state.photos.map((p) =>
             p.id === id ? { ...p, ...data } : p
           ),
+          lastLocalEdit: Date.now(),
         })),
         
       setPhotoCount: (count) =>
@@ -138,17 +187,19 @@ export const useReportStore = create<ReportState>()(
             newPhotos[i] = currentPhotos[i];
           }
           
-          return { photos: newPhotos, photoCount: count };
+          return { photos: newPhotos, photoCount: count, lastLocalEdit: Date.now() };
         }),
         
       addAdditionalPart: (part) =>
         set((state) => ({
           additionalParts: [...state.additionalParts, part],
+          lastLocalEdit: Date.now(),
         })),
         
       removeAdditionalPart: (id) =>
         set((state) => ({
           additionalParts: state.additionalParts.filter((p) => p.id !== id),
+          lastLocalEdit: Date.now(),
         })),
         
       updateAdditionalPart: (id, data) =>
@@ -156,20 +207,70 @@ export const useReportStore = create<ReportState>()(
           additionalParts: state.additionalParts.map((p) =>
             p.id === id ? { ...p, ...data } : p
           ),
+          lastLocalEdit: Date.now(),
         })),
         
-      setAdditionalParts: (parts) => set({ additionalParts: parts }),
+      setAdditionalParts: (parts) => set({ additionalParts: parts, lastLocalEdit: Date.now() }),
       
-      setConclusion: (text) => set({ conclusion: text }),
+      setConclusion: (text) => set({ conclusion: text, lastLocalEdit: Date.now() }),
       
       setTranslation: (translation) => set({ translation }),
       
-      // Load from external data (shared session)
+      // Load from external data (shared session) - substitui tudo
       loadFromData: (data: { inspection?: Partial<InspectionData>; photos?: PhotoData[]; conclusion?: string }) =>
         set({
           inspection: data.inspection ? { ...initialInspection, ...data.inspection } : initialInspection,
           photos: data.photos || createInitialPhotos(4),
           conclusion: data.conclusion || '',
+        }),
+      
+      // Merge inteligente - preserva dados locais mais recentes
+      mergeFromData: (data: { inspection?: Partial<InspectionData>; photos?: PhotoData[]; conclusion?: string }, serverTimestamp?: number) =>
+        set((state) => {
+          const localEditTime = state.lastLocalEdit || 0;
+          const serverTime = serverTimestamp || Date.now();
+          
+          // Se edição local é mais recente que o servidor, não atualizar
+          if (localEditTime > serverTime && localEditTime > 0) {
+            console.log('[Merge] Local edit is newer, skipping merge');
+            return {};
+          }
+          
+          const newInspection = { ...state.inspection };
+          
+          // Merge campo por campo da inspeção
+          if (data.inspection) {
+            Object.keys(data.inspection).forEach((key) => {
+              const k = key as keyof InspectionData;
+              const serverValue = data.inspection![k];
+              const localValue = state.inspection[k];
+              
+              // Se servidor tem valor e local não tem (ou é vazio), usa servidor
+              if (serverValue && (!localValue || localValue === '')) {
+                (newInspection as any)[k] = serverValue;
+              }
+              // Se servidor tem valor mais recente, usa servidor
+              else if (serverValue && serverTime > localEditTime) {
+                (newInspection as any)[k] = serverValue;
+              }
+            });
+          }
+          
+          // Merge das fotos
+          const newPhotos = data.photos 
+            ? mergePhotos(state.photos, data.photos)
+            : state.photos;
+          
+          // Merge da conclusão
+          const newConclusion = (data.conclusion && (!state.conclusion || serverTime > localEditTime))
+            ? data.conclusion
+            : state.conclusion;
+          
+          return {
+            inspection: newInspection,
+            photos: newPhotos,
+            conclusion: newConclusion,
+          };
         }),
       
       // Get all data for sharing
@@ -187,10 +288,12 @@ export const useReportStore = create<ReportState>()(
           additionalParts: [],
           conclusion: '',
           translation: null,
+          lastLocalEdit: 0,
         }),
     }),
     {
       name: 'report-storage',
+      version: 2,
     }
   )
 );
