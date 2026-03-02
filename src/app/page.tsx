@@ -2911,6 +2911,24 @@ export default function TechnicalReportPage() {
     return null;
   });
   
+  // Listener para evento de sessão compartilhada criada (do CollaborationPanel)
+  useEffect(() => {
+    const handleSharedSessionCreated = (event: CustomEvent) => {
+      const { sessionId, permission, reportType } = event.detail;
+      setActiveSharedSession({ sessionId, permission, reportType });
+      // Mudar para a aba correta
+      if (reportType === 'home' || reportType === 'inspecao') {
+        setActiveTab(reportType);
+      }
+    };
+    
+    window.addEventListener('sharedSessionCreated', handleSharedSessionCreated as EventListener);
+    
+    return () => {
+      window.removeEventListener('sharedSessionCreated', handleSharedSessionCreated as EventListener);
+    };
+  }, []);
+  
   // Sincronizar mudanças do store para a sessão compartilhada
   const syncTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   

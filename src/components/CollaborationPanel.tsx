@@ -9,6 +9,7 @@ import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Label } from '@/components/ui/label';
 import { Share2, Users, Copy, Check, QrCode, Edit, Eye, Loader2 } from 'lucide-react';
 import { useSession } from 'next-auth/react';
+import { useRouter } from 'next/navigation';
 
 interface CollaborationPanelProps {
   reportData: any;
@@ -30,9 +31,11 @@ export function CollaborationPanel({
   onExternalOpenChange,
 }: CollaborationPanelProps) {
   const { data: session } = useSession();
+  const router = useRouter();
   const [internalShowDialog, setInternalShowDialog] = useState(false);
   const [copied, setCopied] = useState(false);
   const [sessionUrl, setSessionUrl] = useState<string | null>(null);
+  const [sessionId, setSessionId] = useState<string | null>(null);
   const [permission, setPermission] = useState<'edit' | 'view'>('view');
   const [isCreating, setIsCreating] = useState(false);
 
@@ -45,6 +48,7 @@ export function CollaborationPanel({
     if (externalOpen === true && !sessionUrl) {
       // Reset state when dialog opens externally
       setSessionUrl(null);
+      setSessionId(null);
     }
   }, [externalOpen, sessionUrl]);
 
@@ -73,6 +77,29 @@ export function CollaborationPanel({
 
       if (result.success) {
         setSessionUrl(result.shareLink);
+        setSessionId(result.sessionId);
+        
+        // IMPORTANTE: Entrar automaticamente na sessão compartilhada
+        // Isso ativa a sincronização em tempo real para o criador também
+        localStorage.setItem('activeSharedSession', JSON.stringify({
+          sessionId: result.sessionId,
+          permission: 'edit', // Criador sempre tem permissão de edição
+          creatorName: session?.user?.name || 'Você',
+          reportType,
+        }));
+        
+        // Disparar evento para notificar a página principal
+        window.dispatchEvent(new CustomEvent('sharedSessionCreated', {
+          detail: {
+            sessionId: result.sessionId,
+            permission: 'edit',
+            creatorName: session?.user?.name || 'Você',
+            reportType,
+          }
+        }));
+        
+        // Não recarregar a página - a sincronização vai ativar automaticamente
+        // via evento customizado
       } else {
         alert(result.error || 'Erro ao criar sessão');
       }
