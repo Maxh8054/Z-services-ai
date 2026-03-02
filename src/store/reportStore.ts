@@ -224,47 +224,48 @@ export const useReportStore = create<ReportState>()(
           conclusion: data.conclusion || '',
         }),
       
-      // Merge inteligente - preserva dados locais mais recentes
+      // Merge inteligente - sempre aceita dados do servidor (campos preenchidos)
+      // O sync local envia mudanças para o servidor logo em seguida
       mergeFromData: (data: { inspection?: Partial<InspectionData>; photos?: PhotoData[]; conclusion?: string }, serverTimestamp?: number) =>
         set((state) => {
-          const localEditTime = state.lastLocalEdit || 0;
-          const serverTime = serverTimestamp || Date.now();
-          
-          // Se edição local é mais recente que o servidor, não atualizar
-          if (localEditTime > serverTime && localEditTime > 0) {
-            console.log('[Merge] Local edit is newer, skipping merge');
-            return {};
-          }
-          
           const newInspection = { ...state.inspection };
+          let hasChanges = false;
           
-          // Merge campo por campo da inspeção
+          // Merge campo por campo da inspeção - servidor sempre ganha se tiver valor
           if (data.inspection) {
             Object.keys(data.inspection).forEach((key) => {
               const k = key as keyof InspectionData;
               const serverValue = data.inspection![k];
-              const localValue = state.inspection[k];
               
-              // Se servidor tem valor e local não tem (ou é vazio), usa servidor
-              if (serverValue && (!localValue || localValue === '')) {
-                (newInspection as any)[k] = serverValue;
-              }
-              // Se servidor tem valor mais recente, usa servidor
-              else if (serverValue && serverTime > localEditTime) {
-                (newInspection as any)[k] = serverValue;
+              // Se servidor tem valor, usa o do servidor
+              if (serverValue !== null && serverValue !== undefined && serverValue !== '') {
+                if ((newInspection as any)[k] !== serverValue) {
+                  (newInspection as any)[k] = serverValue;
+                  hasChanges = true;
+                }
               }
             });
           }
           
-          // Merge das fotos
-          const newPhotos = data.photos 
-            ? mergePhotos(state.photos, data.photos)
-            : state.photos;
+          // Merge das fotos - sempre faz merge
+          let newPhotos = state.photos;
+          if (data.photos) {
+            newPhotos = mergePhotos(state.photos, data.photos);
+            hasChanges = true;
+          }
           
-          // Merge da conclusão
-          const newConclusion = (data.conclusion && (!state.conclusion || serverTime > localEditTime))
-            ? data.conclusion
-            : state.conclusion;
+          // Merge da conclusão - servidor sempre ganha se tiver valor
+          let newConclusion = state.conclusion;
+          if (data.conclusion && data.conclusion.trim() !== '') {
+            if (newConclusion !== data.conclusion) {
+              newConclusion = data.conclusion;
+              hasChanges = true;
+            }
+          }
+          
+          if (hasChanges) {
+            console.log('[Merge Inspecao] Applied server changes');
+          }
           
           return {
             inspection: newInspection,

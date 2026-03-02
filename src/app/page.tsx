@@ -2929,10 +2929,6 @@ export default function TechnicalReportPage() {
     };
   }, []);
   
-  // Referência para o timestamp de sincronização (compartilhada entre sync e polling)
-  const lastSyncTimestampRef = useRef<number>(Date.now());
-  const lastAppliedTimestampRef = useRef<number>(0);
-  
   // Sincronizar mudanças do store para a sessão compartilhada
   const syncTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   
@@ -2955,6 +2951,8 @@ export default function TechnicalReportPage() {
           (data.categories && data.categories.some((c: any) => c.photos?.length > 0))) {
         try {
           const now = Date.now();
+          console.log('[Sync] Sending data to server, timestamp:', now);
+          
           await fetch('/api/share', {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
@@ -2968,9 +2966,8 @@ export default function TechnicalReportPage() {
               }
             }),
           });
-          // Atualizar timestamp local para evitar sobrescrever nossas próprias mudanças
-          lastSyncTimestampRef.current = now;
-          lastAppliedTimestampRef.current = now;
+          
+          console.log('[Sync] Data sent successfully');
         } catch (error) {
           // Ignorar erros de rede silenciosamente
           if (error instanceof TypeError && error.message.includes('fetch')) {
@@ -2979,7 +2976,7 @@ export default function TechnicalReportPage() {
           console.error('Error syncing to shared session:', error);
         }
       }
-    }, 1000); // 1 segundo de debounce
+    }, 500); // 500ms de debounce para ser mais responsivo
     
     return () => {
       if (syncTimeoutRef.current) {
@@ -3026,7 +3023,7 @@ export default function TechnicalReportPage() {
             ? new Date(serverData.lastModifiedAt).getTime() 
             : Date.now();
           
-          // Usar merge inteligente para atualizar dados
+          // Sempre fazer merge dos dados do servidor
           if (reportType === 'home') {
             homeStore.mergeFromData({
               inspection: serverData.inspection,
@@ -3040,9 +3037,6 @@ export default function TechnicalReportPage() {
               conclusion: serverData.conclusion,
             }, serverTimestamp);
           }
-          
-          // Atualizar timestamp de controle
-          lastAppliedTimestampRef.current = serverTimestamp;
         }
       } catch (error) {
         // Ignorar erros de rede silenciosamente
@@ -3051,7 +3045,7 @@ export default function TechnicalReportPage() {
         }
         console.error('Polling error:', error);
       }
-    }, 2000); // A cada 2 segundos para melhor responsividade
+    }, 1500); // 1.5 segundos para ser mais responsivo
     
     return () => clearInterval(pollInterval);
   }, [activeSharedSession, homeStore, inspecaoStore, session]);

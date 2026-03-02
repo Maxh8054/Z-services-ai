@@ -227,6 +227,9 @@ export async function PUT(request: NextRequest) {
     const body = await request.json();
     const { sessionId, data } = body;
 
+    console.log('[Share API PUT] Session:', sessionId, 'User:', token.name);
+    console.log('[Share API PUT] Data keys:', data ? Object.keys(data) : 'no data');
+
     if (!sessionId || !data) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
     }
@@ -236,6 +239,7 @@ export async function PUT(request: NextRequest) {
     });
 
     if (!session) {
+      console.log('[Share API PUT] Session not found:', sessionId);
       return NextResponse.json({ error: 'Session not found' }, { status: 404 });
     }
 
@@ -252,6 +256,8 @@ export async function PUT(request: NextRequest) {
         updatedAt: new Date(),
       },
     });
+
+    console.log('[Share API PUT] Updated successfully, timestamp:', data.lastModifiedAt);
 
     return NextResponse.json({ success: true });
   } catch (error) {

@@ -68,9 +68,6 @@ export default function SharedReportPage() {
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
   const [downloadingJson, setDownloadingJson] = useState(false);
   const [downloadingPpt, setDownloadingPpt] = useState(false);
-  
-  // Rastrear último timestamp para evitar sobrescrever mudanças locais
-  const lastServerTimestampRef = useRef<number>(0);
 
   // Carregar sessão compartilhada
   const loadSession = useCallback(async () => {
@@ -85,10 +82,6 @@ export default function SharedReportPage() {
         setEditedData(result.session.data);
         setLastSync(new Date());
         setIsConnected(true);
-        // Atualizar timestamp do servidor
-        if (result.session.data?.lastModifiedAt) {
-          lastServerTimestampRef.current = new Date(result.session.data.lastModifiedAt).getTime();
-        }
       } else {
         setError(result.error || 'Sessão não encontrada');
       }
@@ -114,19 +107,15 @@ export default function SharedReportPage() {
 
         if (result.success) {
           const serverData = result.session.data;
-          const serverTime = serverData?.lastModifiedAt 
-            ? new Date(serverData.lastModifiedAt).getTime() 
-            : 0;
           
-          // Só atualiza se o servidor tem dados mais recentes
-          if (serverTime > lastServerTimestampRef.current) {
-            setSharedSession(result.session);
-            // Só atualiza se não estiver salvando
-            if (!saving) {
-              setEditedData(serverData);
-            }
-            lastServerTimestampRef.current = serverTime;
+          // Sempre atualizar a sessão
+          setSharedSession(result.session);
+          
+          // Só atualiza os dados editados se não estiver salvando
+          if (!saving && serverData) {
+            setEditedData(serverData);
           }
+          
           setLastSync(new Date());
           setIsConnected(true);
         }
@@ -134,7 +123,7 @@ export default function SharedReportPage() {
         console.error('Polling error:', err);
         setIsConnected(false);
       }
-    }, 2000);
+    }, 1500); // 1.5 segundos para ser mais responsivo
 
     return () => clearInterval(pollInterval);
   }, [sessionId, sharedSession, saving]);
@@ -165,8 +154,6 @@ export default function SharedReportPage() {
           }
         }),
       });
-      // Atualizar timestamp local para evitar sobrescrever nossas mudanças
-      lastServerTimestampRef.current = now;
       setLastSync(new Date());
     } catch (err) {
       console.error('Save error:', err);
