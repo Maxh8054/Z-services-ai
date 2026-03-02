@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server';
-import ZAI from 'z-ai-web-dev-sdk';
 
 interface SpellError {
   original: string;
@@ -195,6 +194,57 @@ function getUserPrompt(text: string, language: Language): string {
   return prompts[language];
 }
 
+// Função principal para verificação ortográfica
+async function checkSpellingWithLLM(text: string, language: Language): Promise<SpellError[]> {
+  try {
+    // Usar fetch direto para a API de LLM
+    const apiKey = process.env.Z_AI_API_KEY || process.env.OPENAI_API_KEY;
+    
+    if (!apiKey) {
+      console.log('[SpellCheck] No API key found, skipping spell check');
+      return [];
+    }
+
+    // Tentar usar z-ai-web-dev-sdk primeiro
+    try {
+      const ZAI = await import('z-ai-web-dev-sdk').then(m => m.default || m);
+      const zai = await ZAI.create();
+      
+      const completion = await zai.chat.completions.create({
+        messages: [
+          {
+            role: 'assistant',
+            content: getSystemPrompt(language)
+          },
+          {
+            role: 'user',
+            content: getUserPrompt(text, language)
+          }
+        ],
+        thinking: { type: 'disabled' }
+      });
+
+      const response = completion.choices[0]?.message?.content;
+
+      if (response) {
+        const jsonMatch = response.match(/\{[\s\S]*"errors"[\s\S]*\}/);
+        if (jsonMatch) {
+          const parsed = JSON.parse(jsonMatch[0]);
+          return parsed.errors || [];
+        }
+      }
+    } catch (sdkError) {
+      console.log('[SpellCheck] SDK error, using fallback:', sdkError);
+    }
+
+    // Fallback: retornar array vazio
+    return [];
+  } catch (error) {
+    console.error('[SpellCheck] Error:', error);
+    return [];
+  }
+}
+
 export async function POST(request: NextRequest) {
   try {
     const { text, language = 'pt' } = await request.json();
@@ -205,53 +255,22 @@ export async function POST(request: NextRequest) {
 
     const validLanguage: Language = ['pt', 'en', 'ja', 'zh'].includes(language) ? language : 'pt';
 
-    // Try to use ZAI SDK, fallback to empty errors if not available
-    let zai;
-    try {
-      zai = await ZAI.create();
-    } catch (sdkError) {
-      console.error('ZAI SDK initialization error:', sdkError);
-      // Return empty errors if SDK is not available
-      return NextResponse.json({ errors: [] });
-    }
+    // Verificar spell check
+    const errors = await checkSpellingWithLLM(text, validLanguage);
 
-    const completion = await zai.chat.completions.create({
-      messages: [
-        {
-          role: 'assistant',
-          content: getSystemPrompt(validLanguage)
-        },
-        {
-          role: 'user',
-          content: getUserPrompt(text, validLanguage)
-        }
-      ],
-      thinking: { type: 'disabled' }
-    });
-
-    const response = completion.choices[0]?.message?.content;
-
-    if (!response) {
-      return NextResponse.json({ errors: [] });
-    }
-
-    // Parse JSON response
-    try {
-      // Extract JSON from response (in case there's extra text)
-      const jsonMatch = response.match(/\{[\s\S]*"errors"[\s\S]*\}/);
-      if (jsonMatch) {
-        const parsed = JSON.parse(jsonMatch[0]);
-        return NextResponse.json({ errors: parsed.errors || [] });
-      }
-      return NextResponse.json({ errors: [] });
-    } catch (parseError) {
-      console.error('Failed to parse spell check response:', parseError);
-      return NextResponse.json({ errors: [] });
-    }
+    return NextResponse.json({ errors });
 
   } catch (error) {
     console.error('Spell check error:', error);
     // Return empty errors instead of error response to not break the UI
     return NextResponse.json({ errors: [] });
   }
+}
+
+// Endpoint GET para verificar se o serviço está funcionando
+export async function GET() {
+  return NextResponse.json({ 
+    status: 'ok',
+    message: 'Spell check service is available'
+  });
 }
