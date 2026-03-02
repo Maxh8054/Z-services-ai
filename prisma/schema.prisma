@@ -1,0 +1,107 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "sqlite"
+  url       = env("DATABASE_URL")
+}
+
+model User {
+  id             String           @id @default(cuid())
+  email          String           @unique
+  name           String?
+  password       String?
+  image          String?
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+  reports        ReportHistory[]
+  sessions       Session[]
+  accounts       Account[]
+  sharedSessions SharedSession[]
+}
+
+model SharedSession {
+  id             String   @id @default(cuid())
+  sessionId      String   @unique // ID único para o link
+  creatorId      String
+  creatorName    String
+  reportType     String   // "home" or "inspecao"
+  permission     String   // "edit" or "view"
+  data           String   // JSON string com todos os dados do relatório
+  expiresAt      DateTime
+  savedToHistory Boolean  @default(false) // Se foi salvo no histórico
+  historyId      String?  // ID do registro no histórico se foi salvo
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  creator        User     @relation(fields: [creatorId], references: [id], onDelete: Cascade)
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+model ReportHistory {
+  id          String   @id @default(cuid())
+  userId      String
+  userName    String   // Nome do usuário que criou
+  reportType  String   // "home" (Relatório de Falha) or "inspecao" (Inspeção)
+  tag         String
+  cliente     String?
+  descricao   String?
+  conclusao   String?
+  executantes String?
+  machineDown Boolean  @default(false)
+  data        String   // JSON string of the report data (photos, parts, etc)
+  finalizedAt DateTime @default(now())
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Post {
+  id        String   @id @default(cuid())
+  title     String
+  content   String?
+  published Boolean  @default(false)
+  authorId  String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}

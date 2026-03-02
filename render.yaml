@@ -1,0 +1,18 @@
+services:
+  - type: web
+    name: z-services-ai
+    env: node
+    region: oregon
+    branch: main
+    buildCommand: npm install && sed -i 's/provider  = "sqlite"/provider  = "postgresql"/' prisma/schema.prisma && npx prisma generate && npm run build
+    startCommand: npm start
+    plan: free
+    envVars:
+      - key: DATABASE_URL
+        value: postgresql://z_services_db_f1pd_user:rlEFH4U3U2piH4XlJp0Vf9moAiTyITVC@dpg-d6h0d4ma2pns7388dgq0-a/z_services_db_f1pd
+      - key: NEXTAUTH_SECRET
+        generateValue: true
+      - key: NEXTAUTH_URL
+        value: https://z-services-ai.onrender.com
+      - key: NODE_ENV
+        value: production
