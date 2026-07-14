@@ -24,6 +24,7 @@ export const PREDEFINED_USERS = [
   { id: '16', name: 'Julio Sanches', email: 'julio@zaminebrasil.com', password: '2026' },
   { id: '18', name: 'Wenderson Augusto de Oliveira', email: 'wenderson-a@zaminebrasil.com', password: '2026' },
   { id: '19', name: 'Vinicius Miranda', email: 'convidado@zaminebrasil.com', password: '2026' },
+  { id: '20', name: 'Robson Vicente Rodrigues Magalhães', email: 'robson-v@zaminebrasil.com', password: '2026' },
  ];
 
 // Users who can access the History tab (Dashboard, Ranking, Reports)
