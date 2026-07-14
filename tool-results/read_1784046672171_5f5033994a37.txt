@@ -1,0 +1,818 @@
+     1→'use client';
+     2→
+     3→import React, { useEffect, useState, useCallback } from 'react';
+     4→import { useSession } from 'next-auth/react';
+     5→import { Button } from '@/components/ui/button';
+     6→import { Input } from '@/components/ui/input';
+     7→import { Label } from '@/components/ui/label';
+     8→import { Textarea } from '@/components/ui/textarea';
+     9→import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+    10→import { Badge } from '@/components/ui/badge';
+    11→import { Separator } from '@/components/ui/separator';
+    12→import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+    13→import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
+    14→import { useSharedReportStore } from '@/store/sharedReportStore';
+    15→import { useCollaboration } from '@/hooks/useCollaboration';
+    16→import { useTranslation } from '@/store/translationStore';
+    17→import { TAG_OPTIONS, MACHINE_DATA } from '@/lib/config';
+    18→import { DEFAULT_CATEGORIES } from '@/types/report';
+    19→import {
+    20→  Users, Wifi, WifiOff, ChevronDown, ChevronUp, Clock, Wrench, Package,
+    21→  ListTree, Circle, Camera, FileImage, Edit, X, Check, Image as ImageIcon,
+    22→  AlertCircle, Trash2, Plus, Download, Share2, ExternalLink, RefreshCw, Loader2,
+    23→  FileJson, Lock, ArrowDownToLine
+    24→} from 'lucide-react';
+    25→import { generateHomePowerPoint } from '@/lib/powerpoint';
+    26→import { useRouter } from 'next/navigation';
+    27→
+    28→// Interface para sessão compartilhada
+    29→interface SharedSessionItem {
+    30→  sessionId: string;
+    31→  creatorId: string;
+    32→  creatorName: string;
+    33→  reportType: string;
+    34→  permission: string;
+    35→  createdAt: string;
+    36→  expiresAt: string;
+    37→}
+    38→
+    39→// Gerar ID único
+    40→function generateId(): string {
+    41→  return `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    42→}
+    43→
+    44→export function SharedContent() {
+    45→  const { t } = useTranslation();
+    46→  const { data: session } = useSession();
+    47→  const router = useRouter();
+    48→  const {
+    49→    sessionId,
+    50→    isSharedSession,
+    51→    userCount,
+    52→    lastSync,
+    53→    inspection,
+    54→    categories,
+    55→    conclusion,
+    56→    setSessionInfo,
+    57→    clearSession,
+    58→    setUserCount,
+    59→    setLastSync,
+    60→    updateInspection,
+    61→    setCategories,
+    62→    addPhotoToCategory,
+    63→    removePhotoFromCategory,
+    64→    updatePhotoInCategory,
+    65→    setConclusion,
+    66→    loadFromData,
+    67→    getAllData,
+    68→  } = useSharedReportStore();
+    69→
+    70→  const [expandedCategories, setExpandedCategories] = useState<Record<string, boolean>>({});
+    71→  const [isLoading, setIsLoading] = useState(false);
+    72→  const [isSyncing, setIsSyncing] = useState(false);
+    73→  
+    74→  // Estado para lista de sessões compartilhadas
+    75→  const [sharedSessions, setSharedSessions] = useState<SharedSessionItem[]>([]);
+    76→  const [loadingSessions, setLoadingSessions] = useState(false);
+    77→
+    78→  // Estado para o diálogo de retirar relatório
+    79→  const [showRetireDialog, setShowRetireDialog] = useState(false);
+    80→  const [retireSessionId, setRetireSessionId] = useState<string | null>(null);
+    81→  const [retirePassword, setRetirePassword] = useState('');
+    82→  const [retireError, setRetireError] = useState('');
+    83→  const [retireLoading, setRetireLoading] = useState(false);
+    84→  const [retireSuccess, setRetireSuccess] = useState(false);
+    85→
+    86→  // User ID para identificação na sessão
+    87→  const [userId] = useState(() => `user-${generateId()}`);
+    88→
+    89→  // Carregar sessões compartilhadas
+    90→  const loadSharedSessions = useCallback(async () => {
+    91→    if (!session) return;
+    92→    
+    93→    setLoadingSessions(true);
+    94→    try {
+    95→      const response = await fetch('/api/share?action=list', {
+    96→        credentials: 'include',
+    97→      });
+    98→      const result = await response.json();
+    99→      
+   100→      if (result.success) {
+   101→        setSharedSessions(result.sessions);
+   102→      }
+   103→    } catch (error) {
+   104→      console.error('Error loading shared sessions:', error);
+   105→    } finally {
+   106→      setLoadingSessions(false);
+   107→    }
+   108→  }, [session]);
+   109→
+   110→  useEffect(() => {
+   111→    if (!isSharedSession) {
+   112→      loadSharedSessions();
+   113→    }
+   114→  }, [isSharedSession, loadSharedSessions]);
+   115→
+   116→  // Hook de colaboração
+   117→  const {
+   118→    isConnected,
+   119→    connect,
+   120→    disconnect,
+   121→    sendUpdate,
+   122→    userCount: connectedUsers,
+   123→  } = useCollaboration({
+   124→    sessionId,
+   125→    userId,
+   126→    onRemoteUpdate: (updates) => {
+   127→      loadFromData(updates);
+   128→    },
+   129→    onSessionJoined: (data) => {
+   130→      if (data) {
+   131→        loadFromData(data);
+   132→      }
+   133→    },
+   134→  });
+   135→
+   136→  // Conectar à sessão quando o componente montar
+   137→  useEffect(() => {
+   138→    if (sessionId && !isConnected) {
+   139→      // Inicializar categorias se vazias
+   140→      if (categories.length === 0) {
+   141→        setCategories(DEFAULT_CATEGORIES.map(cat => ({
+   142→          ...cat,
+   143→          photos: [],
+   144→        })));
+   145→      }
+   146→
+   147→      connect(getAllData());
+   148→    }
+   149→
+   150→    return () => {
+   151→      if (isConnected) {
+   152→        disconnect();
+   153→      }
+   154→    };
+   155→  }, [sessionId]);
+   156→
+   157→  // Atualizar userCount quando mudar
+   158→  useEffect(() => {
+   159→    setUserCount(connectedUsers);
+   160→  }, [connectedUsers]);
+   161→
+   162→  // Sincronizar mudanças
+   163→  const syncUpdate = useCallback((updates: any) => {
+   164→    if (isConnected) {
+   165→      sendUpdate(updates);
+   166→      setLastSync(Date.now());
+   167→    }
+   168→  }, [isConnected, sendUpdate]);
+   169→
+   170→  // Handler para mudanças na inspeção
+   171→  const handleInspectionChange = useCallback((field: string, value: any) => {
+   172→    updateInspection({ [field]: value });
+   173→    syncUpdate({ ...getAllData(), inspection: { ...inspection, [field]: value } });
+   174→  }, [updateInspection, syncUpdate, inspection]);
+   175→
+   176→  // Handler para TAG
+   177→  const handleTagChange = useCallback((tag: string) => {
+   178→    updateInspection({ tag });
+   179→    if (tag && MACHINE_DATA[tag]) {
+   180→      const machine = MACHINE_DATA[tag];
+   181→      const newInspection = {
+   182→        tag,
+   183→        modelo: machine.modelo,
+   184→        sn: machine.sn,
+   185→        entrega: machine.entrega,
+   186→        cliente: machine.cliente,
+   187→      };
+   188→      updateInspection(newInspection);
+   189→      syncUpdate({ ...getAllData(), inspection: { ...inspection, ...newInspection } });
+   190→    } else {
+   191→      syncUpdate({ ...getAllData(), inspection: { ...inspection, tag } });
+   192→    }
+   193→  }, [updateInspection, syncUpdate, inspection]);
+   194→
+   195→  // Handler para conclusão
+   196→  const handleConclusionChange = useCallback((value: string) => {
+   197→    setConclusion(value);
+   198→    syncUpdate({ ...getAllData(), conclusion: value });
+   199→  }, [setConclusion, syncUpdate, conclusion]);
+   200→
+   201→  // Sair da sessão
+   202→  const handleLeaveSession = useCallback(() => {
+   203→    if (confirm('Tem certeza que deseja sair da sessão compartilhada?')) {
+   204→      disconnect();
+   205→      clearSession();
+   206→    }
+   207→  }, [disconnect, clearSession]);
+   208→
+   209→  // Gerar PowerPoint
+   210→  const handleGeneratePPT = useCallback(async () => {
+   211→    setIsLoading(true);
+   212→    try {
+   213→      await generateHomePowerPoint({
+   214→        inspection,
+   215→        categories,
+   216→        conclusion,
+   217→      });
+   218→    } catch (error) {
+   219→      console.error('Error generating PPT:', error);
+   220→    } finally {
+   221→      setIsLoading(false);
+   222→    }
+   223→  }, [inspection, categories, conclusion]);
+   224→
+   225→  // Abrir sessão
+   226→  const handleOpenSession = (sessionId: string) => {
+   227→    router.push(`/share/${sessionId}`);
+   228→  };
+   229→
+   230→  // Abrir diálogo de retirar
+   231→  const handleOpenRetireDialog = (sessionId: string) => {
+   232→    setRetireSessionId(sessionId);
+   233→    setRetirePassword('');
+   234→    setRetireError('');
+   235→    setRetireSuccess(false);
+   236→    setShowRetireDialog(true);
+   237→  };
+   238→
+   239→  // Verificar senha e retirar relatório
+   240→  const handleRetireReport = async () => {
+   241→    if (!retireSessionId || !retirePassword.trim()) {
+   242→      setRetireError('Digite sua senha');
+   243→      return;
+   244→    }
+   245→
+   246→    setRetireLoading(true);
+   247→    setRetireError('');
+   248→
+   249→    try {
+   250→      // 1. Verificar senha do usuário logado
+   251→      const verifyResponse = await fetch('/api/verify-password', {
+   252→        method: 'POST',
+   253→        headers: { 'Content-Type': 'application/json' },
+   254→        credentials: 'include',
+   255→        body: JSON.stringify({
+   256→          email: session?.user?.email,
+   257→          currentPassword: retirePassword,
+   258→        }),
+   259→      });
+   260→
+   261→      const verifyResult = await verifyResponse.json();
+   262→
+   263→      if (!verifyResult.valid) {
+   264→        setRetireError('Senha incorreta');
+   265→        setRetireLoading(false);
+   266→        return;
+   267→      }
+   268→
+   269→      // 2. Buscar dados do relatório compartilhado
+   270→      const shareResponse = await fetch(`/api/share?sessionId=${retireSessionId}`, {
+   271→        credentials: 'include',
+   272→      });
+   273→
+   274→      const shareResult = await shareResponse.json();
+   275→
+   276→      if (!shareResult.success) {
+   277→        setRetireError('Erro ao buscar relatório');
+   278→        setRetireLoading(false);
+   279→        return;
+   280→      }
+   281→
+   282→      const reportData = shareResult.session?.data;
+   283→      const tag = reportData?.inspection?.tag || 'relatorio';
+   284→      const dateStr = new Date().toISOString().split('T')[0];
+   285→
+   286→      // 3. Preparar dados para download JSON
+   287→      const dataToExport = {
+   288→        exportedAt: new Date().toISOString(),
+   289→        retiredFrom: 'shared_session',
+   290→        sharedBy: shareResult.session?.creatorName,
+   291→        reportType: shareResult.session?.reportType,
+   292→        inspection: reportData?.inspection,
+   293→        categories: reportData?.categories,
+   294→        photos: reportData?.photos,
+   295→        conclusion: reportData?.conclusion,
+   296→      };
+   297→
+   298→      // 4. Fazer download do JSON
+   299→      const jsonBlob = new Blob([JSON.stringify(dataToExport, null, 2)], { type: 'application/json' });
+   300→      const jsonUrl = URL.createObjectURL(jsonBlob);
+   301→      const jsonLink = document.createElement('a');
+   302→      jsonLink.href = jsonUrl;
+   303→      jsonLink.download = `relatorio_retirado_${tag}_${dateStr}.json`;
+   304→      jsonLink.click();
+   305→      URL.revokeObjectURL(jsonUrl);
+   306→
+   307→      // 5. Fazer download do PowerPoint
+   308→      if (reportData?.inspection && reportData?.categories) {
+   309→        try {
+   310→          await generateHomePowerPoint({
+   311→            inspection: reportData.inspection,
+   312→            categories: reportData.categories,
+   313→            conclusion: reportData.conclusion || '',
+   314→          });
+   315→        } catch (pptError) {
+   316→          console.error('Error generating PowerPoint:', pptError);
+   317→        }
+   318→      }
+   319→
+   320→      // 6. Deletar a sessão compartilhada
+   321→      const deleteResponse = await fetch(`/api/share?sessionId=${retireSessionId}`, {
+   322→        method: 'DELETE',
+   323→        credentials: 'include',
+   324→      });
+   325→
+   326→      const deleteResult = await deleteResponse.json();
+   327→
+   328→      if (!deleteResult.success) {
+   329→        setRetireError('Erro ao remover compartilhamento');
+   330→        setRetireLoading(false);
+   331→        return;
+   332→      }
+   333→
+   334→      // 7. Atualizar lista de sessões
+   335→      loadSharedSessions();
+   336→
+   337→      // 8. Mostrar sucesso
+   338→      setRetireSuccess(true);
+   339→      setRetireLoading(false);
+   340→
+   341→      // Fechar diálogo após 1.5 segundos
+   342→      setTimeout(() => {
+   343→        setShowRetireDialog(false);
+   344→        setRetireSessionId(null);
+   345→        setRetirePassword('');
+   346→        setRetireSuccess(false);
+   347→      }, 1500);
+   348→
+   349→    } catch (error) {
+   350→      console.error('Error retiring report:', error);
+   351→      setRetireError('Erro ao retirar relatório');
+   352→      setRetireLoading(false);
+   353→    }
+   354→  };
+   355→
+   356→  // Se não logado
+   357→  if (!session) {
+   358→    return (
+   359→      <div className="flex flex-col items-center justify-center h-[60vh] text-center p-8">
+   360→        <Users className="h-16 w-16 text-gray-300 mb-4" />
+   361→        <h2 className="text-xl font-semibold text-gray-600 mb-2">Login Necessário</h2>
+   362→        <p className="text-gray-500 mb-4">
+   363→          Faça login para ver relatórios compartilhados.
+   364→        </p>
+   365→      </div>
+   366→    );
+   367→  }
+   368→
+   369→  // Se não tem sessão ativa, mostrar lista de compartilhados
+   370→  if (!isSharedSession || !sessionId) {
+   371→    return (
+   372→      <>
+   373→        <div className="p-4 md:p-6 max-w-4xl mx-auto">
+   374→        <div className="flex items-center justify-between mb-6">
+   375→          <div>
+   376→            <h2 className="text-xl font-bold flex items-center gap-2">
+   377→              <Share2 className="h-5 w-5 text-orange-500" />
+   378→              Relatórios Compartilhados
+   379→            </h2>
+   380→            <p className="text-gray-500 text-sm mt-1">
+   381→              Relatórios que foram compartilhados com você
+   382→            </p>
+   383→          </div>
+   384→          <Button variant="outline" size="sm" onClick={loadSharedSessions} disabled={loadingSessions}>
+   385→            {loadingSessions ? (
+   386→              <Loader2 className="h-4 w-4 animate-spin" />
+   387→            ) : (
+   388→              <RefreshCw className="h-4 w-4" />
+   389→            )}
+   390→          </Button>
+   391→        </div>
+   392→
+   393→        {loadingSessions ? (
+   394→          <div className="flex items-center justify-center h-40">
+   395→            <Loader2 className="h-8 w-8 animate-spin text-orange-500" />
+   396→          </div>
+   397→        ) : sharedSessions.length === 0 ? (
+   398→          <Card>
+   399→            <CardContent className="py-12 text-center">
+   400→              <Share2 className="h-12 w-12 text-gray-300 mx-auto mb-4" />
+   401→              <p className="text-gray-500">Nenhum relatório compartilhado</p>
+   402→              <p className="text-sm text-gray-400 mt-1">
+   403→                Quando alguém compartilhar um relatório com você, ele aparecerá aqui
+   404→              </p>
+   405→            </CardContent>
+   406→          </Card>
+   407→        ) : (
+   408→          <div className="space-y-3">
+   409→            {sharedSessions.map((item) => (
+   410→              <Card key={item.sessionId} className="hover:shadow-md transition-shadow">
+   411→                <CardContent className="p-4">
+   412→                  <div className="flex items-start justify-between gap-4">
+   413→                    <div className="flex-1 min-w-0">
+   414→                      <div className="flex items-center gap-2 mb-2 flex-wrap">
+   415→                        <Badge 
+   416→                          className={item.reportType === 'home' ? 'bg-orange-500' : 'bg-green-500'}
+   417→                        >
+   418→                          {item.reportType === 'home' ? 'Relatório' : 'Inspeção'}
+   419→                        </Badge>
+   420→                        <Badge 
+   421→                          variant="outline"
+   422→                          className={item.permission === 'edit' ? 'text-green-600 border-green-300' : 'text-blue-600 border-blue-300'}
+   423→                        >
+   424→                          {item.permission === 'edit' ? (
+   425→                            <><Edit className="h-3 w-3 mr-1" /> Editar</>
+   426→                          ) : (
+   427→                            <><ExternalLink className="h-3 w-3 mr-1" /> Ver</>
+   428→                          )}
+   429→                        </Badge>
+   430→                      </div>
+   431→                      
+   432→                      <p className="font-medium text-sm mb-1">
+   433→                        Compartilhado por {item.creatorName}
+   434→                      </p>
+   435→                      
+   436→                      <div className="flex items-center gap-4 text-xs text-gray-500">
+   437→                        <span className="flex items-center gap-1">
+   438→                          <Clock className="h-3 w-3" />
+   439→                          Expira: {new Date(item.expiresAt).toLocaleString('pt-BR')}
+   440→                        </span>
+   441→                      </div>
+   442→                    </div>
+   443→
+   444→                    <div className="flex flex-col sm:flex-row gap-2">
+   445→                      {session?.user?.id === item.creatorId && (
+   446→                        <Button 
+   447→                          variant="outline"
+   448→                          size="sm"
+   449→                          className="border-green-500 text-green-600 hover:bg-green-50 h-9"
+   450→                          onClick={() => handleOpenRetireDialog(item.sessionId)}
+   451→                        >
+   452→                          <ArrowDownToLine className="h-4 w-4 mr-1" />
+   453→                          Retirar
+   454→                        </Button>
+   455→                      )}
+   456→                      <Button 
+   457→                        className="bg-orange-500 hover:bg-orange-600 h-9"
+   458→                        size="sm"
+   459→                        onClick={() => handleOpenSession(item.sessionId)}
+   460→                      >
+   461→                        <ExternalLink className="h-4 w-4 mr-1" />
+   462→                        Abrir
+   463→                      </Button>
+   464→                    </div>
+   465→                  </div>
+   466→                </CardContent>
+   467→              </Card>
+   468→            ))}
+   469→          </div>
+   470→        )}
+   471→      </div>
+   472→
+   473→      {/* Diálogo de Retirar */}
+   474→      <Dialog open={showRetireDialog} onOpenChange={setShowRetireDialog}>
+   475→        <DialogContent className="max-w-[90vw] sm:max-w-md">
+   476→          <DialogHeader>
+   477→            <DialogTitle className="flex items-center gap-2">
+   478→              {retireSuccess ? (
+   479→                <>
+   480→                  <Check className="h-5 w-5 text-green-500" />
+   481→                  Relatório Retirado!
+   482→                </>
+   483→              ) : (
+   484→                <>
+   485→                  <Lock className="h-5 w-5 text-orange-500" />
+   486→                  Retirar Relatório
+   487→                </>
+   488→              )}
+   489→            </DialogTitle>
+   490→            <DialogDescription>
+   491→              {retireSuccess 
+   492→                ? 'O download do relatório foi iniciado automaticamente.'
+   493→                : 'Digite sua senha para confirmar a retirada do relatório compartilhado.'
+   494→              }
+   495→            </DialogDescription>
+   496→          </DialogHeader>
+   497→
+   498→          {!retireSuccess ? (
+   499→            <>
+   500→              <div className="space-y-4 py-4">
+   501→                <div className="space-y-2">
+   502→                  <Label htmlFor="retire-password">Sua Senha</Label>
+   503→                  <Input
+   504→                    id="retire-password"
+   505→                    type="password"
+   506→                    placeholder="Digite sua senha de login"
+   507→                    value={retirePassword}
+   508→                    onChange={(e) => setRetirePassword(e.target.value)}
+   509→                    onKeyDown={(e) => e.key === 'Enter' && handleRetireReport()}
+   510→                    className="h-11"
+   511→                  />
+   512→                </div>
+   513→
+   514→                {retireError && (
+   515→                  <div className="text-sm text-red-500 flex items-center gap-2">
+   516→                    <AlertCircle className="h-4 w-4" />
+   517→                    {retireError}
+   518→                  </div>
+   519→                )}
+   520→
+   521→                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-xs text-blue-800">
+   522→                  <p><strong>O que acontece ao retirar:</strong></p>
+   523→                  <ul className="list-disc list-inside mt-1 space-y-1">
+   524→                    <li>Download do relatório em JSON</li>
+   525→                    <li>Download do relatório em PowerPoint</li>
+   526→                    <li>O link de compartilhamento será desativado</li>
+   527→                    <li>O relatório sairá desta lista</li>
+   528→                  </ul>
+   529→                </div>
+   530→              </div>
+   531→
+   532→              <DialogFooter>
+   533→                <Button variant="outline" onClick={() => setShowRetireDialog(false)}>
+   534→                  Cancelar
+   535→                </Button>
+   536→                <Button 
+   537→                  className="bg-green-600 hover:bg-green-700"
+   538→                  onClick={handleRetireReport}
+   539→                  disabled={retireLoading || !retirePassword.trim()}
+   540→                >
+   541→                  {retireLoading ? (
+   542→                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+   543→                  ) : (
+   544→                    <ArrowDownToLine className="h-4 w-4 mr-2" />
+   545→                  )}
+   546→                  Retirar Relatório
+   547→                </Button>
+   548→              </DialogFooter>
+   549→            </>
+   550→          ) : (
+   551→            <div className="py-6 text-center">
+   552→              <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+   553→                <Check className="h-8 w-8 text-green-500" />
+   554→              </div>
+   555→              <p className="text-gray-600">Fechando automaticamente...</p>
+   556→            </div>
+   557→          )}
+   558→        </DialogContent>
+   559→      </Dialog>
+   560→      </>
+   561→    );
+   562→  }
+   563→
+   564→  // Sessão ativa - mostrar editor colaborativo
+   565→  return (
+   566→    <div className="p-4 md:p-6 max-w-6xl mx-auto">
+   567→      {/* Header da sessão */}
+   568→      <div className="bg-gradient-to-r from-indigo-600 to-purple-600 rounded-lg p-4 mb-6 text-white">
+   569→        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+   570→          <div>
+   571→            <h2 className="text-xl font-bold flex items-center gap-2">
+   572→              <Users className="h-5 w-5" />
+   573→              Sessão Compartilhada
+   574→            </h2>
+   575→            <p className="text-white/80 text-sm mt-1">
+   576→              ID: {sessionId}
+   577→            </p>
+   578→          </div>
+   579→          <div className="flex items-center gap-4">
+   580→            {/* Status de conexão */}
+   581→            <div className="flex items-center gap-2">
+   582→              {isConnected ? (
+   583→                <Badge className="bg-green-500 text-white">
+   584→                  <Wifi className="h-3 w-3 mr-1" />
+   585→                  Sincronizado
+   586→                </Badge>
+   587→              ) : (
+   588→                <Badge className="bg-yellow-500 text-white">
+   589→                  <WifiOff className="h-3 w-3 mr-1" />
+   590→                  Conectando...
+   591→                </Badge>
+   592→              )}
+   593→            </div>
+   594→            {/* Usuários online */}
+   595→            <Badge className="bg-white/20 text-white">
+   596→              <Users className="h-3 w-3 mr-1" />
+   597→              {userCount} online
+   598→            </Badge>
+   599→            {/* Última sync */}
+   600→            {lastSync && (
+   601→              <span className="text-white/60 text-xs">
+   602→                Última sync: {new Date(lastSync).toLocaleTimeString()}
+   603→              </span>
+   604→            )}
+   605→          </div>
+   606→        </div>
+   607→      </div>
+   608→
+   609→      {/* Ações */}
+   610→      <div className="flex flex-wrap gap-2 mb-6">
+   611→        <Button
+   612→          onClick={handleGeneratePPT}
+   613→          disabled={isLoading}
+   614→          className="bg-orange-500 hover:bg-orange-600"
+   615→        >
+   616→          <Download className="h-4 w-4 mr-2" />
+   617→          Baixar PowerPoint
+   618→        </Button>
+   619→        <Button
+   620→          variant="outline"
+   621→          onClick={handleLeaveSession}
+   622→          className="text-red-600 border-red-300 hover:bg-red-50"
+   623→        >
+   624→          <X className="h-4 w-4 mr-2" />
+   625→          Sair da Sessão
+   626→        </Button>
+   627→      </div>
+   628→
+   629→      {/* Informações da Execução */}
+   630→      <Card className="mb-6">
+   631→        <CardHeader>
+   632→          <CardTitle className="text-2xl font-bold">{t('report.technicalReport')}</CardTitle>
+   633→        </CardHeader>
+   634→        <CardContent className="space-y-4">
+   635→          {/* Dados da Máquina */}
+   636→          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+   637→            <div className="space-y-2">
+   638→              <Label>{t('report.tag')}</Label>
+   639→              <select
+   640→                value={inspection.tag}
+   641→                onChange={(e) => handleTagChange(e.target.value)}
+   642→                className="w-full h-10 px-3 border rounded-md"
+   643→              >
+   644→                <option value="">{t('placeholder.tag')}</option>
+   645→                {TAG_OPTIONS.map((tag) => (
+   646→                  <option key={tag} value={tag}>{tag}</option>
+   647→                ))}
+   648→              </select>
+   649→            </div>
+   650→            <div className="space-y-2">
+   651→              <Label>{t('report.modelo')}</Label>
+   652→              <Input
+   653→                value={inspection.modelo}
+   654→                onChange={(e) => handleInspectionChange('modelo', e.target.value)}
+   655→              />
+   656→            </div>
+   657→            <div className="space-y-2">
+   658→              <Label>{t('report.sn')}</Label>
+   659→              <Input
+   660→                value={inspection.sn}
+   661→                onChange={(e) => handleInspectionChange('sn', e.target.value)}
+   662→              />
+   663→            </div>
+   664→            <div className="space-y-2">
+   665→              <Label>{t('report.cliente')}</Label>
+   666→              <Input
+   667→                value={inspection.cliente}
+   668→                onChange={(e) => handleInspectionChange('cliente', e.target.value)}
+   669→              />
+   670→            </div>
+   671→            <div className="space-y-2">
+   672→              <Label>{t('report.executionDate')}</Label>
+   673→              <Input
+   674→                type="date"
+   675→                value={inspection.dataExecucao}
+   676→                onChange={(e) => handleInspectionChange('dataExecucao', e.target.value)}
+   677→              />
+   678→            </div>
+   679→            <div className="space-y-2">
+   680→              <Label>{t('report.performers')}</Label>
+   681→              <Input
+   682→                value={inspection.executantes}
+   683→                onChange={(e) => handleInspectionChange('executantes', e.target.value)}
+   684→              />
+   685→            </div>
+   686→          </div>
+   687→
+   688→          <Separator />
+   689→
+   690→          {/* Descrição */}
+   691→          <div className="space-y-2">
+   692→            <Label>{t('report.descricao')}</Label>
+   693→            <Textarea
+   694→              value={inspection.descricao}
+   695→              onChange={(e) => handleInspectionChange('descricao', e.target.value)}
+   696→              rows={3}
+   697→            />
+   698→          </div>
+   699→        </CardContent>
+   700→      </Card>
+   701→
+   702→      {/* Categorias de Fotos */}
+   703→      <div className="space-y-4 mb-6">
+   704→        <h3 className="text-lg font-semibold">{t('photos.title')}</h3>
+   705→        {categories.map((category) => (
+   706→          <Collapsible
+   707→            key={category.id}
+   708→            open={expandedCategories[category.id]}
+   709→            onOpenChange={() => setExpandedCategories(prev => ({
+   710→              ...prev,
+   711→              [category.id]: !prev[category.id]
+   712→            }))}
+   713→          >
+   714→            <Card>
+   715→              <CollapsibleTrigger asChild>
+   716→                <CardHeader className="cursor-pointer hover:bg-gray-50">
+   717→                  <div className="flex items-center justify-between">
+   718→                    <div className="flex items-center gap-3">
+   719→                      <Badge className="bg-orange-500">{category.photos.length}</Badge>
+   720→                      <CardTitle className="text-base">{t(`category.${category.id}`)}</CardTitle>
+   721→                    </div>
+   722→                    {expandedCategories[category.id] ? (
+   723→                      <ChevronUp className="h-5 w-5" />
+   724→                    ) : (
+   725→                      <ChevronDown className="h-5 w-5" />
+   726→                    )}
+   727→                  </div>
+   728→                </CardHeader>
+   729→              </CollapsibleTrigger>
+   730→              <CollapsibleContent>
+   731→                <CardContent className="pt-0">
+   732→                  {category.photos.length === 0 ? (
+   733→                    <p className="text-gray-500 text-center py-4">
+   734→                      Nenhuma foto adicionada
+   735→                    </p>
+   736→                  ) : (
+   737→                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+   738→                      {category.photos.map((photo) => (
+   739→                        <div key={photo.id} className="border rounded-lg p-3">
+   740→                          {photo.imageData && (
+   741→                            <img
+   742→                              src={photo.imageData}
+   743→                              alt=""
+   744→                              className="w-full h-40 object-cover rounded mb-2"
+   745→                            />
+   746→                          )}
+   747→                          <div className="grid grid-cols-2 gap-2 text-sm">
+   748→                            <Input
+   749→                              placeholder="PN"
+   750→                              value={photo.pn || ''}
+   751→                              onChange={(e) => {
+   752→                                updatePhotoInCategory(category.id, photo.id, { pn: e.target.value });
+   753→                                syncUpdate(getAllData());
+   754→                              }}
+   755→                            />
+   756→                            <Input
+   757→                              placeholder={t('photo.partNamePlaceholder')}
+   758→                              value={photo.partName || ''}
+   759→                              onChange={(e) => {
+   760→                                updatePhotoInCategory(category.id, photo.id, { partName: e.target.value });
+   761→                                syncUpdate(getAllData());
+   762→                              }}
+   763→                            />
+   764→                            <Input
+   765→                              placeholder={t('photo.quantityPlaceholder')}
+   766→                              value={photo.quantity || ''}
+   767→                              onChange={(e) => {
+   768→                                updatePhotoInCategory(category.id, photo.id, { quantity: e.target.value });
+   769→                                syncUpdate(getAllData());
+   770→                              }}
+   771→                            />
+   772→                            <Button
+   773→                              variant="ghost"
+   774→                              size="sm"
+   775→                              className="text-red-500"
+   776→                              onClick={() => {
+   777→                                removePhotoFromCategory(category.id, photo.id);
+   778→                                syncUpdate(getAllData());
+   779→                              }}
+   780→                            >
+   781→                              <Trash2 className="h-4 w-4" />
+   782→                            </Button>
+   783→                          </div>
+   784→                        </div>
+   785→                      ))}
+   786→                    </div>
+   787→                  )}
+   788→                </CardContent>
+   789→              </CollapsibleContent>
+   790→            </Card>
+   791→          </Collapsible>
+   792→        ))}
+   793→      </div>
+   794→
+   795→      {/* Conclusão */}
+   796→      <Card className="mb-6">
+   797→        <CardHeader>
+   798→          <CardTitle>{t('conclusion.title')}</CardTitle>
+   799→        </CardHeader>
+   800→        <CardContent>
+   801→          <Textarea
+   802→            value={conclusion}
+   803→            onChange={(e) => handleConclusionChange(e.target.value)}
+   804→            placeholder={t('conclusion.placeholder')}
+   805→            rows={4}
+   806→          />
+   807→        </CardContent>
+   808→      </Card>
+   809→
+   810→      {/* Info sobre sincronização */}
+   811→      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 text-sm text-blue-800">
+   812→        <AlertCircle className="h-4 w-4 inline mr-2" />
+   813→        Todas as alterações são sincronizadas automaticamente com outros usuários na sessão.
+   814→      </div>
+   815→    </div>
+   816→  );
+   817→}
+   818→

@@ -1,0 +1,826 @@
+     1→'use client';
+     2→
+     3→import React, { useState, useEffect, useRef, useMemo } from 'react';
+     4→import { useSession } from 'next-auth/react';
+     5→import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+     6→import { Button } from '@/components/ui/button';
+     7→import { Badge } from '@/components/ui/badge';
+     8→import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+     9→import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+    10→import { Input } from '@/components/ui/input';
+    11→import { Label } from '@/components/ui/label';
+    12→import {
+    13→  Select,
+    14→  SelectContent,
+    15→  SelectItem,
+    16→  SelectTrigger,
+    17→  SelectValue,
+    18→} from '@/components/ui/select';
+    19→import {
+    20→  BarChart,
+    21→  Bar,
+    22→  XAxis,
+    23→  YAxis,
+    24→  CartesianGrid,
+    25→  Tooltip,
+    26→  ResponsiveContainer,
+    27→  Cell,
+    28→} from 'recharts';
+    29→import { 
+    30→  LayoutDashboard, 
+    31→  Trophy, 
+    32→  FileText, 
+    33→  Trash2, 
+    34→  TrendingUp,
+    35→  Calendar,
+    36→  Users,
+    37→  AlertCircle,
+    38→  Lock,
+    39→  Download,
+    40→  Upload,
+    41→  Search,
+    42→  Filter,
+    43→  X,
+    44→} from 'lucide-react';
+    45→import { useTranslation } from '@/store/translationStore';
+    46→
+    47→interface ReportData {
+    48→  id: string;
+    49→  userId: string;
+    50→  userName: string;
+    51→  reportType: string;
+    52→  tag: string;
+    53→  cliente: string | null;
+    54→  descricao: string | null;
+    55→  conclusao: string | null;
+    56→  executantes: string | null;
+    57→  machineDown: boolean;
+    58→  finalizedAt: string;
+    59→}
+    60→
+    61→interface Stats {
+    62→  reports: ReportData[];
+    63→  monthlyStats: Record<string, number>;
+    64→  userStats: Record<string, { name: string; count: number }>;
+    65→  totalReports: number;
+    66→}
+    67→
+    68→const MONTHS = [
+    69→  'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
+    70→  'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'
+    71→];
+    72→
+    73→const COLORS = ['#f97316', '#22c55e', '#3b82f6', '#ef4444', '#8b5cf6', '#ec4899', '#06b6d4', '#eab308', '#84cc16', '#f43f5e', '#6366f1', '#14b8a6'];
+    74→
+    75→// Senha para excluir relatórios
+    76→const DELETE_PASSWORD = '20041982Mh@';
+    77→
+    78→export function HistoryContent() {
+    79→  const { t } = useTranslation();
+    80→  const { data: session } = useSession();
+    81→  const [stats, setStats] = useState<Stats | null>(null);
+    82→  const [loading, setLoading] = useState(true);
+    83→  const [activeTab, setActiveTab] = useState('dashboard');
+    84→  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+    85→  const [reportToDelete, setReportToDelete] = useState<string | null>(null);
+    86→  const [deletePassword, setDeletePassword] = useState('');
+    87→  const [deleteError, setDeleteError] = useState('');
+    88→  const fileInputRef = useRef<HTMLInputElement>(null);
+    89→
+    90→  // Filter states
+    91→  const [searchTerm, setSearchTerm] = useState('');
+    92→  const [filterTag, setFilterTag] = useState('all');
+    93→  const [filterUser, setFilterUser] = useState('all');
+    94→  const [filterDateStart, setFilterDateStart] = useState('');
+    95→  const [filterDateEnd, setFilterDateEnd] = useState('');
+    96→  const [filterReportType, setFilterReportType] = useState('all');
+    97→  const [showFilters, setShowFilters] = useState(false);
+    98→
+    99→  useEffect(() => {
+   100→    fetchStats();
+   101→  }, []);
+   102→
+   103→  const fetchStats = async () => {
+   104→    try {
+   105→      const response = await fetch('/api/history?action=stats', {
+   106→        credentials: 'include',
+   107→      });
+   108→      if (response.ok) {
+   109→        const data = await response.json();
+   110→        setStats(data);
+   111→      } else {
+   112→        console.error('Error fetching stats:', response.status, await response.text());
+   113→      }
+   114→    } catch (error) {
+   115→      console.error('Error fetching stats:', error);
+   116→    } finally {
+   117→      setLoading(false);
+   118→    }
+   119→  };
+   120→
+   121→  const handleDeleteClick = (id: string) => {
+   122→    setReportToDelete(id);
+   123→    setDeletePassword('');
+   124→    setDeleteError('');
+   125→    setShowDeleteDialog(true);
+   126→  };
+   127→
+   128→  const handleConfirmDelete = async () => {
+   129→    if (deletePassword !== DELETE_PASSWORD) {
+   130→      setDeleteError('Senha incorreta!');
+   131→      return;
+   132→    }
+   133→    
+   134→    try {
+   135→      const response = await fetch(`/api/history?id=${reportToDelete}`, {
+   136→        method: 'DELETE',
+   137→        credentials: 'include',
+   138→      });
+   139→      if (response.ok) {
+   140→        setShowDeleteDialog(false);
+   141→        fetchStats();
+   142→      }
+   143→    } catch (error) {
+   144→      console.error('Error deleting report:', error);
+   145→      setDeleteError('Erro ao excluir relatório');
+   146→    }
+   147→  };
+   148→
+   149→  // Exportar histórico para JSON
+   150→  const handleExportHistory = () => {
+   151→    if (!stats) return;
+   152→    
+   153→    const exportData = {
+   154→      exportDate: new Date().toISOString(),
+   155→      totalReports: stats.totalReports,
+   156→      reports: stats.reports.map(report => ({
+   157→        ...report,
+   158→        data: undefined, // Remove o campo data que pode ser muito grande
+   159→      })),
+   160→      monthlyStats: stats.monthlyStats,
+   161→      userStats: stats.userStats,
+   162→    };
+   163→    
+   164→    const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+   165→    const url = URL.createObjectURL(blob);
+   166→    const a = document.createElement('a');
+   167→    a.href = url;
+   168→    a.download = `historico_relatorios_${new Date().toISOString().split('T')[0]}.json`;
+   169→    a.click();
+   170→    URL.revokeObjectURL(url);
+   171→  };
+   172→
+   173→  // Importar histórico de JSON
+   174→  const handleImportHistory = (e: React.ChangeEvent<HTMLInputElement>) => {
+   175→    const file = e.target.files?.[0];
+   176→    if (!file) return;
+   177→    
+   178→    const reader = new FileReader();
+   179→    reader.onload = async (event) => {
+   180→      try {
+   181→        const data = JSON.parse(event.target?.result as string);
+   182→        
+   183→        if (!data.reports || !Array.isArray(data.reports)) {
+   184→          alert('Arquivo inválido. O JSON deve conter um array "reports".');
+   185→          return;
+   186→        }
+   187→        
+   188→        // Confirmar importação com opção de substituir duplicados
+   189→        const replaceDuplicates = confirm(
+   190→          `Deseja importar ${data.reports.length} relatórios?\n\n` +
+   191→          `OK = Substituir duplicados\n` +
+   192→          `Cancelar = Pular duplicados`
+   193→        );
+   194→        
+   195→        // Enviar para a API
+   196→        const response = await fetch('/api/history/import', {
+   197→          method: 'POST',
+   198→          headers: { 'Content-Type': 'application/json' },
+   199→          credentials: 'include',
+   200→          body: JSON.stringify({ 
+   201→            reports: data.reports,
+   202→            replaceDuplicates 
+   203→          }),
+   204→        });
+   205→        
+   206→        if (response.ok) {
+   207→          const result = await response.json();
+   208→          alert(
+   209→            `Importação concluída!\n\n` +
+   210→            `✅ Novos: ${result.imported}\n` +
+   211→            `🔄 Atualizados: ${result.updated || 0}\n` +
+   212→            `⏭️ Ignorados: ${result.skipped}\n` +
+   213→            `📝 Total no arquivo: ${result.total}`
+   214→          );
+   215→          fetchStats();
+   216→        } else {
+   217→          const error = await response.json();
+   218→          alert(`Erro ao importar: ${error.error || 'Erro desconhecido'}`);
+   219→        }
+   220→      } catch (err) {
+   221→        console.error('Error importing history:', err);
+   222→        alert('Erro ao importar arquivo. Verifique se o JSON é válido.');
+   223→      }
+   224→    };
+   225→    reader.readAsText(file);
+   226→    
+   227→    // Reset input
+   228→    if (fileInputRef.current) {
+   229→      fileInputRef.current.value = '';
+   230→    }
+   231→  };
+   232→
+   233→  // Get unique tags and users for filter dropdowns
+   234→  const uniqueTags = useMemo(() => {
+   235→    if (!stats?.reports) return [];
+   236→    return [...new Set(stats.reports.map(r => r.tag))].sort();
+   237→  }, [stats?.reports]);
+   238→
+   239→  const uniqueUsers = useMemo(() => {
+   240→    if (!stats?.reports) return [];
+   241→    return [...new Set(stats.reports.map(r => r.userName))].sort();
+   242→  }, [stats?.reports]);
+   243→
+   244→  // Filtered reports
+   245→  const filteredReports = useMemo(() => {
+   246→    if (!stats?.reports) return [];
+   247→    
+   248→    return stats.reports.filter(report => {
+   249→      // Search term (search in descricao, tag, userName)
+   250→      if (searchTerm) {
+   251→        const search = searchTerm.toLowerCase();
+   252→        const matchesSearch = 
+   253→          (report.descricao?.toLowerCase().includes(search)) ||
+   254→          (report.tag?.toLowerCase().includes(search)) ||
+   255→          (report.userName?.toLowerCase().includes(search)) ||
+   256→          (report.conclusao?.toLowerCase().includes(search)) ||
+   257→          (report.executantes?.toLowerCase().includes(search));
+   258→        if (!matchesSearch) return false;
+   259→      }
+   260→      
+   261→      // Filter by tag
+   262→      if (filterTag !== 'all' && report.tag !== filterTag) return false;
+   263→      
+   264→      // Filter by user
+   265→      if (filterUser !== 'all' && report.userName !== filterUser) return false;
+   266→      
+   267→      // Filter by report type
+   268→      if (filterReportType !== 'all' && report.reportType !== filterReportType) return false;
+   269→      
+   270→      // Filter by date range
+   271→      if (filterDateStart) {
+   272→        const reportDate = new Date(report.finalizedAt);
+   273→        const startDate = new Date(filterDateStart);
+   274→        if (reportDate < startDate) return false;
+   275→      }
+   276→      
+   277→      if (filterDateEnd) {
+   278→        const reportDate = new Date(report.finalizedAt);
+   279→        const endDate = new Date(filterDateEnd);
+   280→        endDate.setHours(23, 59, 59, 999); // End of day
+   281→        if (reportDate > endDate) return false;
+   282→      }
+   283→      
+   284→      return true;
+   285→    });
+   286→  }, [stats?.reports, searchTerm, filterTag, filterUser, filterReportType, filterDateStart, filterDateEnd]);
+   287→
+   288→  // Clear all filters
+   289→  const clearFilters = () => {
+   290→    setSearchTerm('');
+   291→    setFilterTag('all');
+   292→    setFilterUser('all');
+   293→    setFilterDateStart('');
+   294→    setFilterDateEnd('');
+   295→    setFilterReportType('all');
+   296→  };
+   297→
+   298→  // Check if any filter is active
+   299→  const hasActiveFilters = searchTerm || filterTag !== 'all' || filterUser !== 'all' || 
+   300→    filterDateStart || filterDateEnd || filterReportType !== 'all';
+   301→
+   302→  // Prepare monthly data for chart
+   303→  const monthlyChartData = useMemo(() => {
+   304→    if (!stats?.monthlyStats) return [];
+   305→    
+   306→    const currentYear = new Date().getFullYear();
+   307→    return Object.entries(stats.monthlyStats)
+   308→      .filter(([key]) => key.startsWith(String(currentYear)))
+   309→      .map(([key, count]) => {
+   310→        const monthIndex = parseInt(key.split('-')[1]) - 1;
+   311→        return {
+   312→          name: MONTHS[monthIndex].substring(0, 3),
+   313→          fullName: MONTHS[monthIndex],
+   314→          total: count,
+   315→        };
+   316→      })
+   317→      .sort((a, b) => MONTHS.indexOf(a.fullName) - MONTHS.indexOf(b.fullName));
+   318→  }, [stats?.monthlyStats]);
+   319→
+   320→  // Prepare user ranking data
+   321→  const userRankingData = useMemo(() => {
+   322→    if (!stats?.userStats) return [];
+   323→    
+   324→    return Object.values(stats.userStats)
+   325→      .sort((a, b) => b.count - a.count)
+   326→      .map((user, index) => ({
+   327→        name: user.name.split(' ')[0], // First name only
+   328→        fullName: user.name,
+   329→        relatorios: user.count,
+   330→        fill: COLORS[index % COLORS.length],
+   331→      }));
+   332→  }, [stats?.userStats]);
+   333→
+   334→  if (loading) {
+   335→    return (
+   336→      <div className="flex items-center justify-center h-64">
+   337→        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-orange-500"></div>
+   338→      </div>
+   339→    );
+   340→  }
+   341→
+   342→  // Empty state but still allow import
+   343→  if (!stats || stats.totalReports === 0) {
+   344→    return (
+   345→      <div className="space-y-4">
+   346→        <div className="flex flex-col items-center justify-center h-64 text-center">
+   347→          <AlertCircle className="h-16 w-16 text-gray-300 mb-4" />
+   348→          <p className="text-gray-500 text-lg">{t('history.noReports')}</p>
+   349→          <p className="text-gray-400 text-sm mt-2">
+   350→            Os relatórios aparecerão aqui quando forem finalizados
+   351→          </p>
+   352→        </div>
+   353→        {/* Import button even when empty */}
+   354→        <div className="flex justify-center">
+   355→          <Button 
+   356→            onClick={() => fileInputRef.current?.click()}
+   357→            variant="outline"
+   358→            className="border-green-500 text-green-600 hover:bg-green-50"
+   359→          >
+   360→            <Upload className="h-4 w-4 mr-2" />
+   361→            Importar JSON
+   362→          </Button>
+   363→          <input
+   364→            ref={fileInputRef}
+   365→            type="file"
+   366→            accept=".json"
+   367→            onChange={handleImportHistory}
+   368→            className="hidden"
+   369→          />
+   370→        </div>
+   371→      </div>
+   372→    );
+   373→  }
+   374→
+   375→  return (
+   376→    <div className="space-y-4">
+   377→      {/* Navbar interna */}
+   378→      <div className="flex items-center justify-between bg-white rounded-lg shadow p-2">
+   379→        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+   380→          <TabsList className="grid w-full grid-cols-3 h-12">
+   381→            <TabsTrigger value="dashboard" className="flex items-center gap-2 h-10">
+   382→              <LayoutDashboard className="h-4 w-4" />
+   383→              <span className="hidden sm:inline">{t('history.dashboard')}</span>
+   384→            </TabsTrigger>
+   385→            <TabsTrigger value="ranking" className="flex items-center gap-2 h-10">
+   386→              <Trophy className="h-4 w-4" />
+   387→              <span className="hidden sm:inline">{t('history.ranking')}</span>
+   388→            </TabsTrigger>
+   389→            <TabsTrigger value="reports" className="flex items-center gap-2 h-10">
+   390→              <FileText className="h-4 w-4" />
+   391→              <span className="hidden sm:inline">{t('history.reports')}</span>
+   392→            </TabsTrigger>
+   393→          </TabsList>
+   394→        </Tabs>
+   395→      </div>
+   396→
+   397→      {/* Dashboard Tab */}
+   398→      {activeTab === 'dashboard' && (
+   399→        <div className="grid grid-cols-1 gap-4">
+   400→          {/* Total Reports Card */}
+   401→          <Card className="bg-gradient-to-br from-orange-500 to-orange-600 text-white">
+   402→            <CardHeader className="pb-2">
+   403→              <CardTitle className="text-lg flex items-center gap-2">
+   404→                <TrendingUp className="h-5 w-5" />
+   405→                Total de Relatórios
+   406→              </CardTitle>
+   407→            </CardHeader>
+   408→            <CardContent>
+   409→              <p className="text-4xl font-bold">{stats.totalReports}</p>
+   410→              <p className="text-orange-100 text-sm mt-1">Finalizados</p>
+   411→            </CardContent>
+   412→          </Card>
+   413→
+   414→          {/* Monthly Chart */}
+   415→          <Card>
+   416→            <CardHeader>
+   417→              <CardTitle className="flex items-center gap-2">
+   418→                <Calendar className="h-5 w-5 text-orange-500" />
+   419→                {t('history.reportsByMonth')}
+   420→              </CardTitle>
+   421→            </CardHeader>
+   422→            <CardContent>
+   423→              <div className="h-64">
+   424→                <ResponsiveContainer width="100%" height="100%">
+   425→                  <BarChart data={monthlyChartData}>
+   426→                    <CartesianGrid strokeDasharray="3 3" />
+   427→                    <XAxis dataKey="name" tick={{ fontSize: 12 }} />
+   428→                    <YAxis />
+   429→                    <Tooltip 
+   430→                      formatter={(value: number) => [value, t('history.monthlyTotal')]}
+   431→                      labelFormatter={(label) => MONTHS.find(m => m.startsWith(label)) || label}
+   432→                    />
+   433→                    <Bar dataKey="total" fill="#f97316" radius={[4, 4, 0, 0]} />
+   434→                  </BarChart>
+   435→                </ResponsiveContainer>
+   436→              </div>
+   437→            </CardContent>
+   438→          </Card>
+   439→        </div>
+   440→      )}
+   441→
+   442→      {/* Ranking Tab */}
+   443→      {activeTab === 'ranking' && (
+   444→        <div className="grid grid-cols-1 gap-4">
+   445→          <Card>
+   446→            <CardHeader>
+   447→              <CardTitle className="flex items-center gap-2">
+   448→                <Users className="h-5 w-5 text-orange-500" />
+   449→                {t('history.reportsByUser')}
+   450→              </CardTitle>
+   451→            </CardHeader>
+   452→            <CardContent>
+   453→              <div className="h-80">
+   454→                <ResponsiveContainer width="100%" height="100%">
+   455→                  <BarChart data={userRankingData} layout="vertical">
+   456→                    <CartesianGrid strokeDasharray="3 3" />
+   457→                    <XAxis type="number" />
+   458→                    <YAxis dataKey="name" type="category" width={80} tick={{ fontSize: 11 }} />
+   459→                    <Tooltip 
+   460→                      formatter={(value: number) => [value, 'Relatórios']}
+   461→                      labelFormatter={(label) => userRankingData.find(u => u.name === label)?.fullName || label}
+   462→                    />
+   463→                    <Bar dataKey="relatorios" radius={[0, 4, 4, 0]}>
+   464→                      {userRankingData.map((entry, index) => (
+   465→                        <Cell key={`cell-${index}`} fill={entry.fill} />
+   466→                      ))}
+   467→                    </Bar>
+   468→                  </BarChart>
+   469→                </ResponsiveContainer>
+   470→              </div>
+   471→            </CardContent>
+   472→          </Card>
+   473→
+   474→          {/* Podium */}
+   475→          <Card>
+   476→            <CardHeader>
+   477→              <CardTitle className="flex items-center gap-2">
+   478→                <Trophy className="h-5 w-5 text-yellow-500" />
+   479→                Top 3 Colaboradores
+   480→              </CardTitle>
+   481→            </CardHeader>
+   482→            <CardContent>
+   483→              <div className="flex items-end justify-center gap-4 h-40">
+   484→                {userRankingData.slice(0, 3).map((user, index) => (
+   485→                  <div 
+   486→                    key={user.name} 
+   487→                    className={`flex flex-col items-center ${index === 0 ? 'order-2' : index === 1 ? 'order-1' : 'order-3'}`}
+   488→                  >
+   489→                    <div 
+   490→                      className={`w-16 h-${index === 0 ? '24' : index === 1 ? '20' : '16'} rounded-t-lg flex items-end justify-center pb-2`}
+   491→                      style={{ 
+   492→                        backgroundColor: index === 0 ? '#fbbf24' : index === 1 ? '#9ca3af' : '#cd7f32',
+   493→                        height: index === 0 ? '96px' : index === 1 ? '80px' : '64px'
+   494→                      }}
+   495→                    >
+   496→                      <span className="text-white font-bold text-lg">{user.relatorios}</span>
+   497→                    </div>
+   498→                    <div className="text-center mt-2">
+   499→                      <p className="font-semibold text-sm">{user.name}</p>
+   500→                      <p className="text-xs text-gray-500">{user.relatorios} relatórios</p>
+   501→                    </div>
+   502→                    <div className="text-2xl mt-1">
+   503→                      {index === 0 ? '🥇' : index === 1 ? '🥈' : '🥉'}
+   504→                    </div>
+   505→                  </div>
+   506→                ))}
+   507→              </div>
+   508→            </CardContent>
+   509→          </Card>
+   510→        </div>
+   511→      )}
+   512→
+   513→      {/* Reports Tab */}
+   514→      {activeTab === 'reports' && (
+   515→        <div className="space-y-4">
+   516→          {/* Botões de Exportar/Importar */}
+   517→          <div className="flex gap-2 flex-wrap">
+   518→            <Button 
+   519→              onClick={handleExportHistory}
+   520→              className="bg-blue-600 hover:bg-blue-700"
+   521→            >
+   522→              <Download className="h-4 w-4 mr-2" />
+   523→              Exportar JSON
+   524→            </Button>
+   525→            <Button 
+   526→              onClick={() => fileInputRef.current?.click()}
+   527→              variant="outline"
+   528→              className="border-green-500 text-green-600 hover:bg-green-50"
+   529→            >
+   530→              <Upload className="h-4 w-4 mr-2" />
+   531→              Importar JSON
+   532→            </Button>
+   533→            <input
+   534→              ref={fileInputRef}
+   535→              type="file"
+   536→              accept=".json"
+   537→              onChange={handleImportHistory}
+   538→              className="hidden"
+   539→            />
+   540→          </div>
+   541→
+   542→          {/* Search and Filters */}
+   543→          <Card>
+   544→            <CardHeader className="pb-3">
+   545→              <div className="flex items-center justify-between">
+   546→                <CardTitle className="flex items-center gap-2 text-base">
+   547→                  <Search className="h-4 w-4 text-orange-500" />
+   548→                  Pesquisa e Filtros
+   549→                </CardTitle>
+   550→                <div className="flex gap-2">
+   551→                  {hasActiveFilters && (
+   552→                    <Button 
+   553→                      variant="ghost" 
+   554→                      size="sm" 
+   555→                      onClick={clearFilters}
+   556→                      className="text-gray-500"
+   557→                    >
+   558→                      <X className="h-4 w-4 mr-1" />
+   559→                      Limpar
+   560→                    </Button>
+   561→                  )}
+   562→                  <Button 
+   563→                    variant="ghost" 
+   564→                    size="sm" 
+   565→                    onClick={() => setShowFilters(!showFilters)}
+   566→                    className="text-orange-500"
+   567→                  >
+   568→                    <Filter className="h-4 w-4 mr-1" />
+   569→                    {showFilters ? 'Ocultar' : 'Filtros'}
+   570→                  </Button>
+   571→                </div>
+   572→              </div>
+   573→            </CardHeader>
+   574→            <CardContent className="space-y-3">
+   575→              {/* Search Bar */}
+   576→              <div className="relative">
+   577→                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+   578→                <Input
+   579→                  placeholder="Pesquisar por descrição, TAG, pessoa, conclusão..."
+   580→                  value={searchTerm}
+   581→                  onChange={(e) => setSearchTerm(e.target.value)}
+   582→                  className="pl-10"
+   583→                />
+   584→              </div>
+   585→
+   586→              {/* Filters */}
+   587→              {showFilters && (
+   588→                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3 pt-2">
+   589→                  {/* Filter by TAG */}
+   590→                  <div className="space-y-1">
+   591→                    <Label className="text-xs text-gray-500">TAG</Label>
+   592→                    <Select value={filterTag} onValueChange={setFilterTag}>
+   593→                      <SelectTrigger className="h-9">
+   594→                        <SelectValue placeholder="Todas TAGs" />
+   595→                      </SelectTrigger>
+   596→                      <SelectContent>
+   597→                        <SelectItem value="all">Todas TAGs</SelectItem>
+   598→                        {uniqueTags.map(tag => (
+   599→                          <SelectItem key={tag} value={tag}>{tag}</SelectItem>
+   600→                        ))}
+   601→                      </SelectContent>
+   602→                    </Select>
+   603→                  </div>
+   604→
+   605→                  {/* Filter by User */}
+   606→                  <div className="space-y-1">
+   607→                    <Label className="text-xs text-gray-500">Pessoa</Label>
+   608→                    <Select value={filterUser} onValueChange={setFilterUser}>
+   609→                      <SelectTrigger className="h-9">
+   610→                        <SelectValue placeholder="Todos" />
+   611→                      </SelectTrigger>
+   612→                      <SelectContent>
+   613→                        <SelectItem value="all">Todos</SelectItem>
+   614→                        {uniqueUsers.map(user => (
+   615→                          <SelectItem key={user} value={user}>{user}</SelectItem>
+   616→                        ))}
+   617→                      </SelectContent>
+   618→                    </Select>
+   619→                  </div>
+   620→
+   621→                  {/* Filter by Report Type */}
+   622→                  <div className="space-y-1">
+   623→                    <Label className="text-xs text-gray-500">Tipo</Label>
+   624→                    <Select value={filterReportType} onValueChange={setFilterReportType}>
+   625→                      <SelectTrigger className="h-9">
+   626→                        <SelectValue placeholder="Todos" />
+   627→                      </SelectTrigger>
+   628→                      <SelectContent>
+   629→                        <SelectItem value="all">Todos</SelectItem>
+   630→                        <SelectItem value="home">Relatório</SelectItem>
+   631→                        <SelectItem value="inspecao">Inspeção</SelectItem>
+   632→                      </SelectContent>
+   633→                    </Select>
+   634→                  </div>
+   635→
+   636→                  {/* Filter by Date Start */}
+   637→                  <div className="space-y-1">
+   638→                    <Label className="text-xs text-gray-500">Data Início</Label>
+   639→                    <Input
+   640→                      type="date"
+   641→                      value={filterDateStart}
+   642→                      onChange={(e) => setFilterDateStart(e.target.value)}
+   643→                      className="h-9"
+   644→                    />
+   645→                  </div>
+   646→
+   647→                  {/* Filter by Date End */}
+   648→                  <div className="space-y-1">
+   649→                    <Label className="text-xs text-gray-500">Data Fim</Label>
+   650→                    <Input
+   651→                      type="date"
+   652→                      value={filterDateEnd}
+   653→                      onChange={(e) => setFilterDateEnd(e.target.value)}
+   654→                      className="h-9"
+   655→                    />
+   656→                  </div>
+   657→                </div>
+   658→              )}
+   659→
+   660→              {/* Active Filters Display */}
+   661→              {hasActiveFilters && (
+   662→                <div className="flex flex-wrap gap-2 pt-2">
+   663→                  {searchTerm && (
+   664→                    <Badge variant="secondary" className="gap-1">
+   665→                      Busca: "{searchTerm}"
+   666→                      <X className="h-3 w-3 cursor-pointer" onClick={() => setSearchTerm('')} />
+   667→                    </Badge>
+   668→                  )}
+   669→                  {filterTag !== 'all' && (
+   670→                    <Badge variant="secondary" className="gap-1">
+   671→                      TAG: {filterTag}
+   672→                      <X className="h-3 w-3 cursor-pointer" onClick={() => setFilterTag('all')} />
+   673→                    </Badge>
+   674→                  )}
+   675→                  {filterUser !== 'all' && (
+   676→                    <Badge variant="secondary" className="gap-1">
+   677→                      Pessoa: {filterUser}
+   678→                      <X className="h-3 w-3 cursor-pointer" onClick={() => setFilterUser('all')} />
+   679→                    </Badge>
+   680→                  )}
+   681→                  {filterReportType !== 'all' && (
+   682→                    <Badge variant="secondary" className="gap-1">
+   683→                      Tipo: {filterReportType === 'home' ? 'Relatório' : 'Inspeção'}
+   684→                      <X className="h-3 w-3 cursor-pointer" onClick={() => setFilterReportType('all')} />
+   685→                    </Badge>
+   686→                  )}
+   687→                  {filterDateStart && (
+   688→                    <Badge variant="secondary" className="gap-1">
+   689→                      De: {new Date(filterDateStart).toLocaleDateString('pt-BR')}
+   690→                      <X className="h-3 w-3 cursor-pointer" onClick={() => setFilterDateStart('')} />
+   691→                    </Badge>
+   692→                  )}
+   693→                  {filterDateEnd && (
+   694→                    <Badge variant="secondary" className="gap-1">
+   695→                      Até: {new Date(filterDateEnd).toLocaleDateString('pt-BR')}
+   696→                      <X className="h-3 w-3 cursor-pointer" onClick={() => setFilterDateEnd('')} />
+   697→                    </Badge>
+   698→                  )}
+   699→                </div>
+   700→              )}
+   701→            </CardContent>
+   702→          </Card>
+   703→
+   704→          {/* Results Count */}
+   705→          <div className="flex items-center justify-between">
+   706→            <p className="text-sm text-gray-500">
+   707→              Mostrando <span className="font-semibold text-orange-600">{filteredReports.length}</span> de <span className="font-semibold">{stats.reports.length}</span> relatórios
+   708→            </p>
+   709→          </div>
+   710→
+   711→          <Card>
+   712→            <CardHeader>
+   713→              <CardTitle className="flex items-center gap-2">
+   714→                <FileText className="h-5 w-5 text-orange-500" />
+   715→                Relatórios Finalizados ({filteredReports.length})
+   716→              </CardTitle>
+   717→            </CardHeader>
+   718→            <CardContent>
+   719→              {filteredReports.length === 0 ? (
+   720→                <div className="text-center py-8 text-gray-500">
+   721→                  <Search className="h-12 w-12 mx-auto mb-3 text-gray-300" />
+   722→                  <p>Nenhum relatório encontrado com os filtros aplicados</p>
+   723→                  <Button variant="link" onClick={clearFilters} className="text-orange-500 mt-2">
+   724→                    Limpar filtros
+   725→                  </Button>
+   726→                </div>
+   727→              ) : (
+   728→                <div className="overflow-x-auto">
+   729→                  <table className="w-full text-sm">
+   730→                    <thead>
+   731→                      <tr className="border-b bg-gray-50">
+   732→                        <th className="text-left p-3 font-medium">{t('history.table.user')}</th>
+   733→                        <th className="text-left p-3 font-medium">{t('history.table.type')}</th>
+   734→                        <th className="text-left p-3 font-medium">{t('history.table.tag')}</th>
+   735→                        <th className="text-left p-3 font-medium">{t('history.table.description')}</th>
+   736→                        <th className="text-left p-3 font-medium">{t('history.table.date')}</th>
+   737→                        <th className="text-left p-3 font-medium">Ações</th>
+   738→                      </tr>
+   739→                    </thead>
+   740→                    <tbody>
+   741→                      {filteredReports.map((report) => (
+   742→                        <tr key={report.id} className="border-b hover:bg-gray-50">
+   743→                          <td className="p-3">
+   744→                            <p className="font-medium">{report.userName}</p>
+   745→                          </td>
+   746→                          <td className="p-3">
+   747→                            <Badge variant={report.reportType === 'home' ? 'default' : 'secondary'}
+   748→                              className={report.reportType === 'home' ? 'bg-orange-500' : 'bg-green-500 text-white'}
+   749→                            >
+   750→                              {report.reportType === 'home' ? t('history.type.home') : t('history.type.inspecao')}
+   751→                            </Badge>
+   752→                            {report.machineDown && (
+   753→                              <Badge className="bg-red-500 text-white ml-1">
+   754→                                {t('history.machineDown')}
+   755→                              </Badge>
+   756→                            )}
+   757→                          </td>
+   758→                          <td className="p-3 font-mono">{report.tag}</td>
+   759→                          <td className="p-3 max-w-xs truncate" title={report.descricao || ''}>
+   760→                            {report.descricao}
+   761→                          </td>
+   762→                          <td className="p-3 whitespace-nowrap">
+   763→                            {new Date(report.finalizedAt).toLocaleDateString('pt-BR')}
+   764→                          </td>
+   765→                          <td className="p-3">
+   766→                            <Button
+   767→                              variant="ghost"
+   768→                              size="icon"
+   769→                              className="h-8 w-8 text-red-500 hover:text-red-700"
+   770→                              onClick={() => handleDeleteClick(report.id)}
+   771→                            >
+   772→                              <Trash2 className="h-4 w-4" />
+   773→                            </Button>
+   774→                          </td>
+   775→                        </tr>
+   776→                      ))}
+   777→                    </tbody>
+   778→                  </table>
+   779→                </div>
+   780→              )}
+   781→            </CardContent>
+   782→          </Card>
+   783→        </div>
+   784→      )}
+   785→
+   786→      {/* Delete Password Dialog */}
+   787→      <Dialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+   788→        <DialogContent className="max-w-sm">
+   789→          <DialogHeader>
+   790→            <DialogTitle className="flex items-center gap-2">
+   791→              <Lock className="h-5 w-5 text-red-500" />
+   792→              Confirmar Exclusão
+   793→            </DialogTitle>
+   794→          </DialogHeader>
+   795→          <div className="space-y-4 py-4">
+   796→            <p className="text-sm text-gray-500">
+   797→              Digite a senha para excluir este relatório:
+   798→            </p>
+   799→            <div className="space-y-2">
+   800→              <Label htmlFor="delete-password">Senha</Label>
+   801→              <Input
+   802→                id="delete-password"
+   803→                type="password"
+   804→                value={deletePassword}
+   805→                onChange={(e) => setDeletePassword(e.target.value)}
+   806→                placeholder="Digite a senha"
+   807→              />
+   808→            </div>
+   809→            {deleteError && (
+   810→              <p className="text-sm text-red-500">{deleteError}</p>
+   811→            )}
+   812→          </div>
+   813→          <DialogFooter>
+   814→            <Button variant="outline" onClick={() => setShowDeleteDialog(false)}>
+   815→              Cancelar
+   816→            </Button>
+   817→            <Button variant="destructive" onClick={handleConfirmDelete}>
+   818→              Excluir
+   819→            </Button>
+   820→          </DialogFooter>
+   821→        </DialogContent>
+   822→      </Dialog>
+   823→    </div>
+   824→  );
+   825→}
+   826→

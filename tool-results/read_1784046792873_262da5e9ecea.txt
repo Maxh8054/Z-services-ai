@@ -1,0 +1,851 @@
+     1→'use client';
+     2→
+     3→import React, { useEffect, useState, useCallback, useRef } from 'react';
+     4→import { useParams, useRouter } from 'next/navigation';
+     5→import { useSession } from 'next-auth/react';
+     6→import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+     7→import { Button } from '@/components/ui/button';
+     8→import { Badge } from '@/components/ui/badge';
+     9→import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
+    10→import { TextareaWithSpellCheck } from '@/components/TextareaWithSpellCheck';
+    11→import { 
+    12→  AlertCircle, 
+    13→  Loader2, 
+    14→  Users, 
+    15→  Edit, 
+    16→  Eye, 
+    17→  Clock,
+    18→  ArrowLeft,
+    19→  Save,
+    20→  Share2,
+    21→  Wifi,
+    22→  WifiOff,
+    23→  AlertTriangle,
+    24→  ExternalLink,
+    25→  Download,
+    26→  FileJson,
+    27→  FileText
+    28→} from 'lucide-react';
+    29→import { useTranslation } from '@/store/translationStore';
+    30→import { useHomeReportStore } from '@/store/homeReportStore';
+    31→import { useReportStore } from '@/store/reportStore';
+    32→import { generateHomePowerPoint, generatePowerPoint } from '@/lib/powerpoint';
+    33→
+    34→interface SharedData {
+    35→  inspection?: any;
+    36→  categories?: any[];
+    37→  photos?: any[];
+    38→  conclusion?: string;
+    39→  reportType?: string;
+    40→  lastModifiedBy?: string;
+    41→  lastModifiedAt?: string;
+    42→}
+    43→
+    44→interface SharedSession {
+    45→  sessionId: string;
+    46→  creatorName: string;
+    47→  reportType: string;
+    48→  permission: string;
+    49→  data: SharedData;
+    50→  expiresAt: string;
+    51→}
+    52→
+    53→export default function SharedReportPage() {
+    54→  const params = useParams();
+    55→  const router = useRouter();
+    56→  const sessionId = params.id as string;
+    57→  const { data: session, status } = useSession();
+    58→  const { t } = useTranslation();
+    59→  const homeStore = useHomeReportStore();
+    60→  const inspecaoStore = useReportStore();
+    61→
+    62→  const [loading, setLoading] = useState(true);
+    63→  const [error, setError] = useState<string | null>(null);
+    64→  const [sharedSession, setSharedSession] = useState<SharedSession | null>(null);
+    65→  const [editedData, setEditedData] = useState<SharedData | null>(null);
+    66→  const [saving, setSaving] = useState(false);
+    67→  const [lastSync, setLastSync] = useState<Date | null>(null);
+    68→  const [isConnected, setIsConnected] = useState(true);
+    69→  const [showConfirmDialog, setShowConfirmDialog] = useState(false);
+    70→  const [downloadingJson, setDownloadingJson] = useState(false);
+    71→  const [downloadingPpt, setDownloadingPpt] = useState(false);
+    72→
+    73→  // Timestamp da última edição LOCAL (feita pelo usuário nesta página)
+    74→  // Usado para evitar que dados antigos do servidor sobrescrevam edições locais
+    75→  const lastLocalEditRef = useRef<number>(0);
+    76→
+    77→  // Carregar sessão compartilhada
+    78→  const loadSession = useCallback(async () => {
+    79→    try {
+    80→      const response = await fetch(`/api/share?sessionId=${sessionId}`, {
+    81→        credentials: 'include',
+    82→      });
+    83→      const result = await response.json();
+    84→
+    85→      if (result.success) {
+    86→        setSharedSession(result.session);
+    87→        setEditedData(result.session.data);
+    88→        setLastSync(new Date());
+    89→        setIsConnected(true);
+    90→      } else {
+    91→        setError(result.error || 'Sessão não encontrada');
+    92→      }
+    93→    } catch (err) {
+    94→      console.error('Error loading session:', err);
+    95→      setError('Erro ao carregar sessão');
+    96→      setIsConnected(false);
+    97→    } finally {
+    98→      setLoading(false);
+    99→    }
+   100→  }, [sessionId]);
+   101→
+   102→  // Polling para sincronização (a cada 2 segundos para mais fluidez)
+   103→  useEffect(() => {
+   104→    if (!sharedSession) return;
+   105→
+   106→    const pollInterval = setInterval(async () => {
+   107→      try {
+   108→        const response = await fetch(`/api/share?sessionId=${sessionId}`, {
+   109→          credentials: 'include',
+   110→        });
+   111→        const result = await response.json();
+   112→
+   113→        if (result.success) {
+   114→          const serverData = result.session.data;
+   115→          
+   116→          // Sempre atualizar a sessão
+   117→          setSharedSession(result.session);
+   118→          
+   119→          // Só atualiza os dados editados se não estiver salvando
+   120→          if (!saving && serverData) {
+   121→            // REGRA CRÍTICA: Só aceitar dados do servidor se forem MAIS RECENTES que a edição local
+   122→            const serverTimestamp = serverData.lastModifiedAt 
+   123→              ? new Date(serverData.lastModifiedAt).getTime() 
+   124→              : Date.now();
+   125→            const localEditTime = lastLocalEditRef.current;
+   126→            
+   127→            if (serverTimestamp > localEditTime) {
+   128→              // Dados do servidor são mais recentes - aceitar
+   129→              console.log('[Share Page] Applied server data, serverTime:', serverTimestamp, '> localEditTime:', localEditTime);
+   130→              setEditedData(serverData);
+   131→            } else {
+   132→              // Dados do servidor são mais antigos - ignorar (manter edição local)
+   133→              console.log('[Share Page] SKIPPED server data, serverTime:', serverTimestamp, '<= localEditTime:', localEditTime);
+   134→            }
+   135→          }
+   136→          
+   137→          setLastSync(new Date());
+   138→          setIsConnected(true);
+   139→        }
+   140→      } catch (err) {
+   141→        console.error('Polling error:', err);
+   142→        setIsConnected(false);
+   143→      }
+   144→    }, 1500); // 1.5 segundos para ser mais responsivo
+   145→
+   146→    return () => clearInterval(pollInterval);
+   147→  }, [sessionId, sharedSession, saving]);
+   148→
+   149→  useEffect(() => {
+   150→    if (sessionId) {
+   151→      loadSession();
+   152→    }
+   153→  }, [sessionId, loadSession]);
+   154→
+   155→  // Salvar alterações
+   156→  const handleSave = async () => {
+   157→    if (!sharedSession || sharedSession.permission !== 'edit' || !editedData) return;
+   158→
+   159→    setSaving(true);
+   160→    try {
+   161→      const now = Date.now();
+   162→      const response = await fetch('/api/share', {
+   163→        method: 'PUT',
+   164→        headers: { 'Content-Type': 'application/json' },
+   165→        credentials: 'include',
+   166→        body: JSON.stringify({ 
+   167→          sessionId, 
+   168→          data: {
+   169→            ...editedData,
+   170→            lastModifiedBy: session?.user?.name || 'Usuário',
+   171→            lastModifiedAt: new Date(now).toISOString(),
+   172→          }
+   173→        }),
+   174→      });
+   175→      setLastSync(new Date());
+   176→    } catch (err) {
+   177→      console.error('Save error:', err);
+   178→    } finally {
+   179→      setSaving(false);
+   180→    }
+   181→  };
+   182→
+   183→  // Verificar se há dados significativos no relatório
+   184→  const hasSignificantData = (store: any) => {
+   185→    if (!store) return false;
+   186→    const data = store.getAllData ? store.getAllData() : store;
+   187→    if (data.inspection?.tag || data.inspection?.cliente || data.inspection?.descricao) return true;
+   188→    if (data.categories?.some((cat: any) => cat.photos?.some((p: any) => p.imageData))) return true;
+   189→    if (data.photos?.some((p: any) => p.imageData)) return true;
+   190→    if (data.conclusion) return true;
+   191→    return false;
+   192→  };
+   193→
+   194→  // Verificar se o relatório compartilhado tem dados significativos
+   195→  const hasSharedData = (data: SharedData | null) => {
+   196→    if (!data) return false;
+   197→    if (data.inspection?.tag || data.inspection?.cliente || data.inspection?.descricao) return true;
+   198→    if (data.categories?.some((cat: any) => cat.photos?.some((p: any) => p.imageData))) return true;
+   199→    if (data.photos?.some((p: any) => p.imageData)) return true;
+   200→    if (data.conclusion) return true;
+   201→    return false;
+   202→  };
+   203→
+   204→  // Download JSON do relatório ATUAL do usuário (backup antes de abrir compartilhado)
+   205→  const handleDownloadJson = async () => {
+   206→    setDownloadingJson(true);
+   207→    try {
+   208→      const homeData = homeStore.getAllData();
+   209→      const inspecaoData = inspecaoStore.getAllData();
+   210→      
+   211→      const dataToExport = {
+   212→        exportedAt: new Date().toISOString(),
+   213→        homeReport: hasSignificantData(homeStore) ? homeData : null,
+   214→        inspecaoReport: hasSignificantData(inspecaoStore) ? inspecaoData : null,
+   215→      };
+   216→      
+   217→      const blob = new Blob([JSON.stringify(dataToExport, null, 2)], { type: 'application/json' });
+   218→      const url = URL.createObjectURL(blob);
+   219→      const link = document.createElement('a');
+   220→      link.href = url;
+   221→      link.download = `relatorio_backup_${new Date().toISOString().split('T')[0]}.json`;
+   222→      link.click();
+   223→      URL.revokeObjectURL(url);
+   224→    } catch (error) {
+   225→      console.error('Error downloading JSON:', error);
+   226→    } finally {
+   227→      setDownloadingJson(false);
+   228→    }
+   229→  };
+   230→
+   231→  // Download PowerPoint do relatório ATUAL do usuário (backup)
+   232→  const handleDownloadPpt = async () => {
+   233→    setDownloadingPpt(true);
+   234→    try {
+   235→      const homeData = homeStore.getAllData();
+   236→      const inspecaoData = inspecaoStore.getAllData();
+   237→      
+   238→      // Prioriza o relatório que tem dados
+   239→      if (hasSignificantData(homeStore)) {
+   240→        await generateHomePowerPoint({
+   241→          inspection: homeData.inspection,
+   242→          categories: homeData.categories,
+   243→          conclusion: homeData.conclusion,
+   244→        });
+   245→      } else if (hasSignificantData(inspecaoStore)) {
+   246→        // Para inspeção, usa o gerador padrão
+   247→        await generateHomePowerPoint({
+   248→          inspection: inspecaoData.inspection,
+   249→          categories: [],
+   250→          conclusion: inspecaoData.conclusion,
+   251→        });
+   252→      }
+   253→    } catch (error) {
+   254→      console.error('Error downloading PPT:', error);
+   255→    } finally {
+   256→      setDownloadingPpt(false);
+   257→    }
+   258→  };
+   259→
+   260→  // Download JSON do relatório COMPARTILHADO
+   261→  const [downloadingSharedJson, setDownloadingSharedJson] = useState(false);
+   262→  const [downloadingSharedPpt, setDownloadingSharedPpt] = useState(false);
+   263→
+   264→  const handleDownloadSharedJson = async () => {
+   265→    if (!editedData) return;
+   266→    setDownloadingSharedJson(true);
+   267→    try {
+   268→      const dataToExport = {
+   269→        exportedAt: new Date().toISOString(),
+   270→        sharedBy: sharedSession?.creatorName,
+   271→        reportType: sharedSession?.reportType,
+   272→        inspection: editedData.inspection,
+   273→        categories: editedData.categories,
+   274→        photos: editedData.photos,
+   275→        conclusion: editedData.conclusion,
+   276→      };
+   277→      
+   278→      const blob = new Blob([JSON.stringify(dataToExport, null, 2)], { type: 'application/json' });
+   279→      const url = URL.createObjectURL(blob);
+   280→      const link = document.createElement('a');
+   281→      link.href = url;
+   282→      const tag = editedData.inspection?.tag || 'relatorio';
+   283→      link.download = `relatorio_compartilhado_${tag}_${new Date().toISOString().split('T')[0]}.json`;
+   284→      link.click();
+   285→      URL.revokeObjectURL(url);
+   286→    } catch (error) {
+   287→      console.error('Error downloading shared JSON:', error);
+   288→    } finally {
+   289→      setDownloadingSharedJson(false);
+   290→    }
+   291→  };
+   292→
+   293→  // Download PowerPoint do relatório COMPARTILHADO
+   294→  const handleDownloadSharedPpt = async () => {
+   295→    if (!editedData) return;
+   296→    setDownloadingSharedPpt(true);
+   297→    try {
+   298→      const reportType = sharedSession?.reportType || 'home';
+   299→      
+   300→      if (reportType === 'home') {
+   301→        await generateHomePowerPoint({
+   302→          inspection: editedData.inspection || {},
+   303→          categories: editedData.categories || [],
+   304→          conclusion: editedData.conclusion || '',
+   305→        });
+   306→      } else {
+   307→        // Inspeção
+   308→        await generatePowerPoint({
+   309→          inspection: editedData.inspection || {},
+   310→          photos: editedData.photos || [],
+   311→          additionalParts: [],
+   312→          conclusion: editedData.conclusion || '',
+   313→        });
+   314→      }
+   315→    } catch (error) {
+   316→      console.error('Error downloading shared PPT:', error);
+   317→    } finally {
+   318→      setDownloadingSharedPpt(false);
+   319→    }
+   320→  };
+   321→
+   322→  // Ir para o editor principal
+   323→  const handleOpenInEditor = () => {
+   324→    // Verificar se há dados significativos nos stores
+   325→    const hasHomeData = hasSignificantData(homeStore);
+   326→    const hasInspecaoData = hasSignificantData(inspecaoStore);
+   327→    
+   328→    if (hasHomeData || hasInspecaoData) {
+   329→      setShowConfirmDialog(true);
+   330→      return;
+   331→    }
+   332→    
+   333→    proceedToEditor();
+   334→  };
+   335→
+   336→  const proceedToEditor = () => {
+   337→    if (!editedData) return;
+   338→    
+   339→    const reportType = sharedSession?.reportType || 'home';
+   340→    
+   341→    // Carregar dados no store correto
+   342→    if (reportType === 'home') {
+   343→      homeStore.loadFromData({
+   344→        inspection: editedData.inspection,
+   345→        categories: editedData.categories,
+   346→        conclusion: editedData.conclusion,
+   347→      });
+   348→    } else {
+   349→      inspecaoStore.loadFromData({
+   350→        inspection: editedData.inspection,
+   351→        photos: editedData.photos,
+   352→        conclusion: editedData.conclusion,
+   353→      });
+   354→    }
+   355→    
+   356→    // Flag para indicar que é uma sessão compartilhada
+   357→    localStorage.setItem('activeSharedSession', JSON.stringify({
+   358→      sessionId,
+   359→      permission: sharedSession?.permission,
+   360→      creatorName: sharedSession?.creatorName,
+   361→      reportType,
+   362→    }));
+   363→    
+   364→    // Flag para ir para a aba correta
+   365→    localStorage.setItem('openTabOnLoad', reportType);
+   366→    
+   367→    setShowConfirmDialog(false);
+   368→    router.push('/');
+   369→  };
+   370→
+   371→  // Atualizar campo
+   372→  const updateField = (field: string, value: any) => {
+   373→    if (!editedData) return;
+   374→    const now = Date.now();
+   375→    lastLocalEditRef.current = now; // Registrar timestamp da edição local
+   376→    setEditedData({
+   377→      ...editedData,
+   378→      inspection: {
+   379→        ...editedData.inspection,
+   380→        [field]: value,
+   381→      },
+   382→      lastModifiedBy: session?.user?.name || 'Usuário',
+   383→      lastModifiedAt: new Date(now).toISOString(),
+   384→    });
+   385→  };
+   386→
+   387→  const updateConclusion = (value: string) => {
+   388→    if (!editedData) return;
+   389→    const now = Date.now();
+   390→    lastLocalEditRef.current = now; // Registrar timestamp da edição local
+   391→    setEditedData({
+   392→      ...editedData,
+   393→      conclusion: value,
+   394→      lastModifiedBy: session?.user?.name || 'Usuário',
+   395→      lastModifiedAt: new Date(now).toISOString(),
+   396→    });
+   397→  };
+   398→
+   399→  if (status === 'loading' || loading) {
+   400→    return (
+   401→      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+   402→        <div className="text-center">
+   403→          <Loader2 className="h-12 w-12 animate-spin text-orange-500 mx-auto mb-4" />
+   404→          <p className="text-gray-600">Carregando relatório compartilhado...</p>
+   405→        </div>
+   406→      </div>
+   407→    );
+   408→  }
+   409→
+   410→  if (!session) {
+   411→    return (
+   412→      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+   413→        <Card className="max-w-md">
+   414→          <CardContent className="pt-6 text-center">
+   415→            <Users className="h-16 w-16 text-orange-500 mx-auto mb-4" />
+   416→            <h2 className="text-xl font-semibold mb-2">Login Necessário</h2>
+   417→            <p className="text-gray-600 mb-4">
+   418→              Faça login para acessar o relatório compartilhado.
+   419→            </p>
+   420→            <Button 
+   421→              className="bg-orange-500 hover:bg-orange-600"
+   422→              onClick={() => router.push('/')}
+   423→            >
+   424→              Fazer Login
+   425→            </Button>
+   426→          </CardContent>
+   427→        </Card>
+   428→      </div>
+   429→    );
+   430→  }
+   431→
+   432→  if (error) {
+   433→    return (
+   434→      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+   435→        <Card className="max-w-md">
+   436→          <CardContent className="pt-6 text-center">
+   437→            <AlertCircle className="h-16 w-16 text-red-500 mx-auto mb-4" />
+   438→            <h2 className="text-xl font-semibold mb-2">Erro</h2>
+   439→            <p className="text-gray-600 mb-4">{error}</p>
+   440→            <Button 
+   441→              className="bg-orange-500 hover:bg-orange-600"
+   442→              onClick={() => router.push('/')}
+   443→            >
+   444→              Ir para Início
+   445→            </Button>
+   446→          </CardContent>
+   447→        </Card>
+   448→      </div>
+   449→    );
+   450→  }
+   451→
+   452→  if (!sharedSession || !editedData) {
+   453→    return (
+   454→      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+   455→        <div className="text-center text-gray-500">
+   456→          Carregando dados...
+   457→        </div>
+   458→      </div>
+   459→    );
+   460→  }
+   461→
+   462→  const isEditor = sharedSession.permission === 'edit';
+   463→  const reportTypeLabel = sharedSession.reportType === 'home' ? 'Relatório de Falha' : 'Inspeção';
+   464→
+   465→  return (
+   466→    <div className="min-h-screen bg-gray-50">
+   467→      {/* Header */}
+   468→      <header className="bg-white shadow-sm sticky top-0 z-10">
+   469→        <div className="max-w-7xl mx-auto px-4 py-3">
+   470→          {/* Mobile Layout */}
+   471→          <div className="md:hidden">
+   472→            <div className="flex items-center gap-2 mb-3">
+   473→              <Button variant="ghost" size="icon" className="h-10 w-10" onClick={() => router.push('/')}>
+   474→                <ArrowLeft className="h-5 w-5" />
+   475→              </Button>
+   476→              <div className="flex-1 min-w-0">
+   477→                <h1 className="text-base font-bold text-gray-900 flex items-center gap-2 truncate">
+   478→                  <Share2 className="h-4 w-4 text-orange-500 flex-shrink-0" />
+   479→                  <span className="truncate">Relatório Compartilhado</span>
+   480→                </h1>
+   481→                <p className="text-xs text-gray-500 truncate">
+   482→                  por {sharedSession.creatorName} • {reportTypeLabel}
+   483→                </p>
+   484→              </div>
+   485→            </div>
+   486→            
+   487→            {/* Status badges - linha separada no mobile */}
+   488→            <div className="flex items-center gap-2 flex-wrap">
+   489→              {isConnected ? (
+   490→                <Badge className="bg-green-500 text-xs">
+   491→                  <Wifi className="h-3 w-3 mr-1" />
+   492→                  Sincronizado
+   493→                </Badge>
+   494→              ) : (
+   495→                <Badge className="bg-yellow-500 text-xs">
+   496→                  <WifiOff className="h-3 w-3 mr-1" />
+   497→                  Reconectando...
+   498→                </Badge>
+   499→              )}
+   500→              
+   501→              <Badge className={isEditor ? 'bg-blue-500 text-xs' : 'bg-gray-500 text-xs'}>
+   502→                {isEditor ? (
+   503→                  <><Edit className="h-3 w-3 mr-1" /> Editando</>
+   504→                ) : (
+   505→                  <><Eye className="h-3 w-3 mr-1" /> Visualizando</>
+   506→                )}
+   507→              </Badge>
+   508→              
+   509→              {lastSync && (
+   510→                <span className="text-xs text-gray-400 flex items-center gap-1">
+   511→                  <Clock className="h-3 w-3" />
+   512→                  {lastSync.toLocaleTimeString()}
+   513→                </span>
+   514→              )}
+   515→            </div>
+   516→          </div>
+   517→
+   518→          {/* Desktop Layout */}
+   519→          <div className="hidden md:flex items-center justify-between">
+   520→            <div className="flex items-center gap-3">
+   521→              <Button variant="ghost" size="icon" onClick={() => router.push('/')}>
+   522→                <ArrowLeft className="h-5 w-5" />
+   523→              </Button>
+   524→              <div>
+   525→                <h1 className="text-lg font-bold text-gray-900 flex items-center gap-2">
+   526→                  <Share2 className="h-5 w-5 text-orange-500" />
+   527→                  Relatório Compartilhado
+   528→                </h1>
+   529→                <p className="text-sm text-gray-500">
+   530→                  por {sharedSession.creatorName} • {reportTypeLabel}
+   531→                </p>
+   532→              </div>
+   533→            </div>
+   534→
+   535→            <div className="flex items-center gap-3">
+   536→              {isConnected ? (
+   537→                <Badge className="bg-green-500">
+   538→                  <Wifi className="h-3 w-3 mr-1" />
+   539→                  Sincronizado
+   540→                </Badge>
+   541→              ) : (
+   542→                <Badge className="bg-yellow-500">
+   543→                  <WifiOff className="h-3 w-3 mr-1" />
+   544→                  Reconectando...
+   545→                </Badge>
+   546→              )}
+   547→              
+   548→              <Badge className={isEditor ? 'bg-blue-500' : 'bg-gray-500'}>
+   549→                {isEditor ? (
+   550→                  <><Edit className="h-3 w-3 mr-1" /> Editando</>
+   551→                ) : (
+   552→                  <><Eye className="h-3 w-3 mr-1" /> Visualizando</>
+   553→                )}
+   554→              </Badge>
+   555→              
+   556→              {lastSync && (
+   557→                <span className="text-xs text-gray-400 flex items-center gap-1">
+   558→                  <Clock className="h-3 w-3" />
+   559→                  {lastSync.toLocaleTimeString()}
+   560→                </span>
+   561→              )}
+   562→            </div>
+   563→          </div>
+   564→        </div>
+   565→      </header>
+   566→
+   567→      {/* Content */}
+   568→      <main className="max-w-7xl mx-auto px-4 py-4 md:py-6">
+   569→        {/* Info de última modificação */}
+   570→        {editedData.lastModifiedBy && editedData.lastModifiedAt && (
+   571→          <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg text-sm text-blue-800 flex items-center gap-2">
+   572→            <Users className="h-4 w-4" />
+   573→            <span>
+   574→              Última modificação por <strong>{editedData.lastModifiedBy}</strong> em{' '}
+   575→              {new Date(editedData.lastModifiedAt).toLocaleString('pt-BR')}
+   576→            </span>
+   577→          </div>
+   578→        )}
+   579→
+   580→        {/* Actions */}
+   581→        <div className="flex flex-wrap gap-2 mb-4">
+   582→          <Button 
+   583→            className="bg-orange-500 hover:bg-orange-600 h-11 md:h-10"
+   584→            onClick={handleOpenInEditor}
+   585→          >
+   586→            <ExternalLink className="h-4 w-4 mr-2" />
+   587→            Abrir no Editor
+   588→          </Button>
+   589→          
+   590→          {isEditor && (
+   591→            <Button 
+   592→              variant="outline"
+   593→              onClick={handleSave}
+   594→              disabled={saving}
+   595→              className="h-11 md:h-10"
+   596→            >
+   597→              {saving ? (
+   598→                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+   599→              ) : (
+   600→                <Save className="h-4 w-4 mr-2" />
+   601→              )}
+   602→              Salvar
+   603→            </Button>
+   604→          )}
+   605→          
+   606→          {/* Botões de download do relatório compartilhado */}
+   607→          {hasSharedData(editedData) && (
+   608→            <>
+   609→              <Button 
+   610→                variant="outline"
+   611→                onClick={handleDownloadSharedJson}
+   612→                disabled={downloadingSharedJson}
+   613→                className="h-11 md:h-10 border-green-500 text-green-600 hover:bg-green-50"
+   614→              >
+   615→                {downloadingSharedJson ? (
+   616→                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+   617→                ) : (
+   618→                  <FileJson className="h-4 w-4 mr-2" />
+   619→                )}
+   620→                Baixar JSON
+   621→              </Button>
+   622→              
+   623→              <Button 
+   624→                variant="outline"
+   625→                onClick={handleDownloadSharedPpt}
+   626→                disabled={downloadingSharedPpt}
+   627→                className="h-11 md:h-10 border-purple-500 text-purple-600 hover:bg-purple-50"
+   628→              >
+   629→                {downloadingSharedPpt ? (
+   630→                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+   631→                ) : (
+   632→                  <FileText className="h-4 w-4 mr-2" />
+   633→                )}
+   634→                Baixar PowerPoint
+   635→              </Button>
+   636→            </>
+   637→          )}
+   638→        </div>
+   639→
+   640→        {/* Report Data */}
+   641→        <div className="grid grid-cols-1 gap-4">
+   642→          {/* Info Card */}
+   643→          <Card>
+   644→            <CardHeader className="pb-2">
+   645→              <CardTitle className="text-base">Informações</CardTitle>
+   646→            </CardHeader>
+   647→            <CardContent>
+   648→              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+   649→                <div>
+   650→                  <p className="text-gray-500">TAG</p>
+   651→                  {isEditor ? (
+   652→                    <input
+   653→                      type="text"
+   654→                      value={editedData.inspection?.tag || ''}
+   655→                      onChange={(e) => updateField('tag', e.target.value)}
+   656→                      className="w-full mt-1 px-2 py-1 border rounded text-sm"
+   657→                    />
+   658→                  ) : (
+   659→                    <p className="font-medium">{editedData.inspection?.tag || '-'}</p>
+   660→                  )}
+   661→                </div>
+   662→                <div>
+   663→                  <p className="text-gray-500">Cliente</p>
+   664→                  {isEditor ? (
+   665→                    <input
+   666→                      type="text"
+   667→                      value={editedData.inspection?.cliente || ''}
+   668→                      onChange={(e) => updateField('cliente', e.target.value)}
+   669→                      className="w-full mt-1 px-2 py-1 border rounded text-sm"
+   670→                    />
+   671→                  ) : (
+   672→                    <p className="font-medium">{editedData.inspection?.cliente || '-'}</p>
+   673→                  )}
+   674→                </div>
+   675→                <div>
+   676→                  <p className="text-gray-500">Inspetor</p>
+   677→                  {isEditor ? (
+   678→                    <input
+   679→                      type="text"
+   680→                      value={editedData.inspection?.inspetor || ''}
+   681→                      onChange={(e) => updateField('inspetor', e.target.value)}
+   682→                      className="w-full mt-1 px-2 py-1 border rounded text-sm"
+   683→                    />
+   684→                  ) : (
+   685→                    <p className="font-medium">{editedData.inspection?.inspetor || '-'}</p>
+   686→                  )}
+   687→                </div>
+   688→                <div>
+   689→                  <p className="text-gray-500">Expira em</p>
+   690→                  <p className="font-medium text-xs">
+   691→                    {new Date(sharedSession.expiresAt).toLocaleString('pt-BR')}
+   692→                  </p>
+   693→                </div>
+   694→              </div>
+   695→            </CardContent>
+   696→          </Card>
+   697→
+   698→          {/* Description */}
+   699→          <Card>
+   700→            <CardHeader className="pb-2">
+   701→              <CardTitle className="text-base">Descrição</CardTitle>
+   702→            </CardHeader>
+   703→            <CardContent>
+   704→              {isEditor ? (
+   705→                <TextareaWithSpellCheck
+   706→                  value={editedData.inspection?.descricao || ''}
+   707→                  onChange={(value) => updateField('descricao', value)}
+   708→                  className="text-sm"
+   709→                  minHeight="min-h-[80px]"
+   710→                  placeholder="Descrição do problema..."
+   711→                  language="pt"
+   712→                  t={t}
+   713→                />
+   714→              ) : (
+   715→                <p className="whitespace-pre-wrap text-sm">{editedData.inspection?.descricao || 'Sem descrição'}</p>
+   716→              )}
+   717→            </CardContent>
+   718→          </Card>
+   719→
+   720→          {/* Conclusion */}
+   721→          <Card>
+   722→            <CardHeader className="pb-2">
+   723→              <CardTitle className="text-base">Conclusão</CardTitle>
+   724→            </CardHeader>
+   725→            <CardContent>
+   726→              {isEditor ? (
+   727→                <TextareaWithSpellCheck
+   728→                  value={editedData.conclusion || ''}
+   729→                  onChange={updateConclusion}
+   730→                  className="text-sm"
+   731→                  minHeight="min-h-[100px]"
+   732→                  placeholder="Conclusão do relatório..."
+   733→                  language="pt"
+   734→                  t={t}
+   735→                />
+   736→              ) : (
+   737→                <p className="whitespace-pre-wrap text-sm">{editedData.conclusion || 'Sem conclusão'}</p>
+   738→              )}
+   739→            </CardContent>
+   740→          </Card>
+   741→
+   742→          {/* Photos */}
+   743→          {editedData.categories && editedData.categories.length > 0 && (
+   744→            <Card>
+   745→              <CardHeader className="pb-2">
+   746→                <CardTitle className="text-base">
+   747→                  Categorias de Fotos
+   748→                </CardTitle>
+   749→              </CardHeader>
+   750→              <CardContent>
+   751→                <div className="space-y-3">
+   752→                  {editedData.categories.map((cat: any, index: number) => (
+   753→                    <div key={index} className="border rounded-lg p-3">
+   754→                      <div className="flex items-center gap-2 mb-2">
+   755→                        <Badge className="bg-orange-500">{cat.photos?.length || 0}</Badge>
+   756→                        <span className="font-medium text-sm">{cat.name || cat.id || `Categoria ${index + 1}`}</span>
+   757→                      </div>
+   758→                      {cat.photos && cat.photos.length > 0 && (
+   759→                        <div className="grid grid-cols-3 md:grid-cols-6 gap-2">
+   760→                          {cat.photos.map((photo: any, pIndex: number) => (
+   761→                            <div key={pIndex} className="relative aspect-square rounded overflow-hidden bg-gray-100">
+   762→                              <img 
+   763→                                src={photo.imageData || photo.data} 
+   764→                                alt=""
+   765→                                className="w-full h-full object-cover"
+   766→                              />
+   767→                              {photo.pn && (
+   768→                                <div className="absolute bottom-0 left-0 right-0 bg-black/60 text-white text-xs p-1 text-center">
+   769→                                  {photo.pn}
+   770→                                </div>
+   771→                              )}
+   772→                            </div>
+   773→                          ))}
+   774→                        </div>
+   775→                      )}
+   776→                    </div>
+   777→                  ))}
+   778→                </div>
+   779→              </CardContent>
+   780→            </Card>
+   781→          )}
+   782→        </div>
+   783→      </main>
+   784→
+   785→      {/* Confirm Dialog with Download Options */}
+   786→      <Dialog open={showConfirmDialog} onOpenChange={setShowConfirmDialog}>
+   787→        <DialogContent className="max-w-[90vw] md:max-w-lg">
+   788→          <DialogHeader>
+   789→            <DialogTitle className="flex items-center gap-2">
+   790→              <AlertTriangle className="h-5 w-5 text-yellow-500" />
+   791→              Relatório em Andamento
+   792→            </DialogTitle>
+   793→            <DialogDescription className="text-sm text-gray-600 pt-2">
+   794→              Você já tem um relatório em andamento. Abrir o relatório compartilhado no editor irá substituir seu trabalho atual.
+   795→            </DialogDescription>
+   796→          </DialogHeader>
+   797→          
+   798→          <div className="py-4 space-y-4">
+   799→            <p className="text-sm text-gray-500">
+   800→              Deseja fazer backup do seu relatório atual antes de continuar?
+   801→            </p>
+   802→            
+   803→            {/* Download buttons */}
+   804→            <div className="flex flex-col sm:flex-row gap-2">
+   805→              <Button 
+   806→                variant="outline" 
+   807→                className="flex-1 h-11"
+   808→                onClick={handleDownloadJson}
+   809→                disabled={downloadingJson}
+   810→              >
+   811→                {downloadingJson ? (
+   812→                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+   813→                ) : (
+   814→                  <FileJson className="h-4 w-4 mr-2" />
+   815→                )}
+   816→                Baixar JSON
+   817→              </Button>
+   818→              <Button 
+   819→                variant="outline" 
+   820→                className="flex-1 h-11"
+   821→                onClick={handleDownloadPpt}
+   822→                disabled={downloadingPpt}
+   823→              >
+   824→                {downloadingPpt ? (
+   825→                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+   826→                ) : (
+   827→                  <FileText className="h-4 w-4 mr-2" />
+   828→                )}
+   829→                Baixar PowerPoint
+   830→              </Button>
+   831→            </div>
+   832→            
+   833→            <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-xs text-blue-800">
+   834→              <p><strong>Dica:</strong> O download do JSON permite restaurar seu relatório depois. O PowerPoint é uma versão estática para visualização.</p>
+   835→            </div>
+   836→          </div>
+   837→          
+   838→          <DialogFooter className="flex-col gap-2 sm:flex-row">
+   839→            <Button variant="outline" onClick={() => setShowConfirmDialog(false)} className="w-full sm:w-auto">
+   840→              Cancelar
+   841→            </Button>
+   842→            <Button className="bg-orange-500 hover:bg-orange-600 w-full sm:w-auto" onClick={proceedToEditor}>
+   843→              Abrir Relatório Compartilhado
+   844→            </Button>
+   845→          </DialogFooter>
+   846→        </DialogContent>
+   847→      </Dialog>
+   848→    </div>
+   849→  );
+   850→}
+   851→
