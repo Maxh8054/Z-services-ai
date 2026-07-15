@@ -1,7 +1,5 @@
 import { NextAuthOptions } from 'next-auth';
 import CredentialsProvider from 'next-auth/providers/credentials';
-import { PrismaAdapter } from '@next-auth/prisma-adapter';
-import { db } from '@/lib/db';
 import bcrypt from 'bcryptjs';
 
 // Pre-defined users
@@ -44,7 +42,6 @@ export const isHistoryAdmin = (email: string | null | undefined): boolean => {
 export const ADMIN_EMAIL = 'max-r@zaminebrasil.com';
 
 export const authOptions: NextAuthOptions = {
-  adapter: PrismaAdapter(db),
   providers: [
     CredentialsProvider({
       name: 'credentials',
@@ -57,58 +54,73 @@ export const authOptions: NextAuthOptions = {
           return null;
         }
 
-        // Check predefined users first
+        // Check predefined users first (plain text comparison)
         const predefinedUser = PREDEFINED_USERS.find(
           (u) => u.email === credentials.email && u.password === credentials.password
         );
 
         if (predefinedUser) {
-          // Check if user exists in DB, if not create
-          let dbUser = await db.user.findUnique({
+          // Try to sync with database (optional - don't fail if DB is down)
+          try {
+            const { db } = await import('@/lib/db');
+            let dbUser = await db.user.findUnique({
+              where: { email: credentials.email },
+            });
+
+            if (!dbUser) {
+              const hashedPassword = await bcrypt.hash(credentials.password, 10);
+              dbUser = await db.user.create({
+                data: {
+                  email: predefinedUser.email,
+                  name: predefinedUser.name,
+                  password: hashedPassword,
+                },
+              });
+            }
+
+            return {
+              id: dbUser.id,
+              email: dbUser.email,
+              name: dbUser.name,
+            };
+          } catch {
+            // Database not available - return user from predefined list
+            return {
+              id: predefinedUser.id,
+              email: predefinedUser.email,
+              name: predefinedUser.name,
+            };
+          }
+        }
+
+        // Check database for updated passwords (optional)
+        try {
+          const { db } = await import('@/lib/db');
+          const user = await db.user.findUnique({
             where: { email: credentials.email },
           });
 
-          if (!dbUser) {
-            const hashedPassword = await bcrypt.hash(credentials.password, 10);
-            dbUser = await db.user.create({
-              data: {
-                email: predefinedUser.email,
-                name: predefinedUser.name,
-                password: hashedPassword,
-              },
-            });
+          if (!user || !user.password) {
+            return null;
+          }
+
+          const passwordMatch = await bcrypt.compare(
+            credentials.password,
+            user.password
+          );
+
+          if (!passwordMatch) {
+            return null;
           }
 
           return {
-            id: dbUser.id,
-            email: dbUser.email,
-            name: dbUser.name,
+            id: user.id,
+            email: user.email,
+            name: user.name,
           };
-        }
-
-        // Check database for updated passwords
-        const user = await db.user.findUnique({
-          where: { email: credentials.email },
-        });
-
-        if (!user || !user.password) {
+        } catch {
           return null;
         }
-
-        const passwordMatch = await bcrypt.compare(
-          credentials.password,
-          user.password
-        );
-
-        if (!passwordMatch) {
-          return null;
-        }
-
-        return {
-          id: user.id,
-          email: user.email,
-          name: user.name,
-        };
       },
     }),
   ],
