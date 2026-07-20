@@ -1,10 +1,11 @@
 import { create } from 'zustand';
-import { persist, createJSONStorage } from 'zustand/middleware';
+import { persist } from 'zustand/middleware';
 import type { InspectionData, PhotoData, AdditionalPart, PhotoCategory } from '@/types/report';
 import { DEFAULT_CATEGORIES } from '@/types/report';
+import { idbStorage } from '@/lib/idbStorage';
 
 // Versão do storage - incrementar quando mudar a estrutura das categorias
-const STORAGE_VERSION = 4;
+const STORAGE_VERSION = 5;
 
 // Criar fotos iniciais para uma categoria (2 fotos por padrão)
 const createInitialCategoryPhotos = (categoryId: string): PhotoData[] => {
@@ -365,52 +366,24 @@ export const useHomeReportStore = create<HomeReportState>()(
     {
       name: 'home-report-storage',
       version: STORAGE_VERSION,
-      // Exclude large image data from localStorage to avoid quota issues
-      partialize: (state) => ({
-        ...state,
-        categories: state.categories.map(cat => ({
-          ...cat,
-          photos: cat.photos.map(photo => ({
-            ...photo,
-            imageData: undefined,
-            editedImageData: undefined,
-            embeddedPhotos: undefined,
-          })),
-        })),
-        inspection: {
-          ...state.inspection,
-          machinePhoto: undefined,
-          horimetroPhoto: undefined,
-          serialPhoto: undefined,
-          localPhoto: undefined,
-        },
-      }),
+      storage: idbStorage,
+      // v5: Full persistence using IndexedDB - no data stripping
       migrate: (persistedState: any, version: number) => {
         if (version < STORAGE_VERSION && persistedState) {
           if (persistedState.categories) {
             persistedState.categories = persistedState.categories.filter(
               (cat: PhotoCategory) => VALID_CATEGORY_IDS.includes(cat.id)
             );
-            // Strip image data to prevent quota issues
-            persistedState.categories = persistedState.categories.map((cat: any) => ({
-              ...cat,
-              photos: (cat.photos || []).map((photo: any) => ({
-                ...photo,
-                imageData: undefined,
-                editedImageData: undefined,
-                embeddedPhotos: undefined,
-              })),
-            }));
-          }
-          if (persistedState.inspection) {
-            persistedState.inspection.machinePhoto = undefined;
-            persistedState.inspection.horimetroPhoto = undefined;
-            persistedState.inspection.serialPhoto = undefined;
-            persistedState.inspection.localPhoto = undefined;
           }
         }
         return persistedState;
       },
+      // Only persist these fields (exclude transient metadata)
+      partialize: (state) => ({
+        inspection: state.inspection,
+        categories: state.categories,
+        conclusion: state.conclusion,
+      }),
     }
   )
 );

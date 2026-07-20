@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type { InspectionData, PhotoData, AdditionalPart } from '@/types/report';
+import { idbStorage } from '@/lib/idbStorage';
 
 // Função auxiliar para fazer merge de fotos
 function mergePhotos(localPhotos: PhotoData[], serverPhotos: PhotoData[]): PhotoData[] {
@@ -356,39 +357,29 @@ export const useReportStore = create<ReportState>()(
     }),
     {
       name: 'report-storage',
-      version: 3,
-      // Exclude large image data from localStorage to avoid quota issues
+      version: 4,
+      storage: idbStorage,
+      // v4: Full persistence using IndexedDB - no data stripping
+      // Only persist data fields (exclude transient metadata)
       partialize: (state) => ({
-        ...state,
-        photos: state.photos.map(photo => ({
-          ...photo,
-          imageData: undefined, // Don't persist large base64 images
-          editedImageData: undefined, // Don't persist large base64 images
-        })),
-        inspection: {
-          ...state.inspection,
-          machinePhoto: undefined, // Don't persist large base64 images
-          horimetroPhoto: undefined,
-          serialPhoto: undefined,
-          localPhoto: undefined,
-        },
+        inspection: state.inspection,
+        photos: state.photos,
+        photoCount: state.photoCount,
+        additionalParts: state.additionalParts,
+        conclusion: state.conclusion,
+        translation: state.translation,
       }),
-      // Migration function to handle version changes
+      // Migration from older versions
       migrate: (persistedState: any, version: number) => {
-        // If version is older, clear large data to prevent quota issues
-        if (version < 3 && persistedState) {
+        if (version < 4 && persistedState) {
+          // Ensure embeddedPhotos and secondaryImageData are restored
           if (persistedState.photos) {
             persistedState.photos = persistedState.photos.map((photo: any) => ({
               ...photo,
-              imageData: undefined,
-              editedImageData: undefined,
+              embeddedPhotos: photo.embeddedPhotos || [],
+              secondaryImageData: photo.secondaryImageData || null,
+              hasAdditionalParts: photo.hasAdditionalParts || false,
             }));
-          }
-          if (persistedState.inspection) {
-            persistedState.inspection.machinePhoto = undefined;
-            persistedState.inspection.horimetroPhoto = undefined;
-            persistedState.inspection.serialPhoto = undefined;
-            persistedState.inspection.localPhoto = undefined;
           }
         }
         return persistedState;
