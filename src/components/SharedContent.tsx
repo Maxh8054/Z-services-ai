@@ -22,6 +22,7 @@ import {
   AlertCircle, Trash2, Plus, Download, Share2, ExternalLink, RefreshCw, Loader2,
   FileJson, Lock, ArrowDownToLine
 } from 'lucide-react';
+import SmartImage from '@/components/SmartImage';
 import { generateHomePowerPoint } from '@/lib/powerpoint';
 import { useRouter } from 'next/navigation';
 
@@ -738,11 +739,13 @@ export function SharedContent() {
                       {category.photos.map((photo) => (
                         <div key={photo.id} className="border rounded-lg p-3">
                           {photo.imageData && (
-                            <img
-                              src={photo.imageData}
-                              alt=""
-                              className="w-full h-40 object-cover rounded mb-2"
-                            />
+                            <div className="w-full h-40 rounded mb-2 overflow-hidden bg-neutral-700">
+                              <SmartImage
+                                src={photo.imageData}
+                                alt=""
+                                className="w-full h-full"
+                              />
+                            </div>
                           )}
                           <div className="grid grid-cols-2 gap-2 text-sm">
                             <Input

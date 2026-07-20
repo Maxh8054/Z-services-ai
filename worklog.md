@@ -45,3 +45,36 @@ Stage Summary:
 - Password set to default: 2026
 - User will appear in the login dropdown on the login page
 - First login will automatically create the user record in the SQLite database
+---
+Task ID: 1
+Agent: Main Agent
+Task: Implement SmartImage container for photo orientation detection + persistence hydration guard
+
+Work Log:
+- Created `/src/components/SmartImage.tsx` — a memoized component that replaces `<img>` tags for photos
+  - Detects photo orientation on load (naturalHeight/naturalWidth ratio)
+  - Portrait photos (ratio >= 1.2): uses `object-contain` — full photo visible, no stretching
+  - Landscape photos: keeps `object-cover` — fills container as before
+  - Container size NEVER changes — grid pattern is preserved
+- Updated photo containers in page.tsx (Home tab + Inspeção tab) from `bg-gray-200` to `bg-neutral-700`
+  - Dark background shows through when portrait photos use `object-contain`
+  - Landscape photos still fill entirely, so bg is invisible
+  - Divider lines updated to `bg-neutral-500` for visibility on dark bg
+- Replaced all photo `<img>` tags with `<SmartImage>` in:
+  - page.tsx: IdentificationPhoto, Home tab photo cards (primary + secondary), Inspeção tab photo cards (primary + secondary)
+  - SharedContent.tsx: collaborative tab photo display
+  - share/[id]/page.tsx: share page thumbnails
+- Camera `<video>` streams kept as `object-cover` (not photos, correct behavior)
+- Created `/src/hooks/useStoresHydrated.ts` — uses `useSyncExternalStore` to detect Zustand persist hydration
+  - Subscribes to `onFinishHydration` from both stores
+  - 3-second safety timeout to prevent infinite blocking
+  - No "setState in effect" lint warning
+- Added hydration guard in page.tsx: shows "Carregando dados..." loading screen until stores hydrate from IndexedDB
+- This prevents flash of empty/default state on page reload
+
+Stage Summary:
+- SmartImage component: `/src/components/SmartImage.tsx`
+- Hydration hook: `/src/hooks/useStoresHydrated.ts`
+- All photo rendering locations updated (6 files, 8+ img tags replaced)
+- Both features verified via agent-browser — app loads, both tabs work, no runtime errors
+- Lint passes cleanly

@@ -16,6 +16,8 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/component
 import { generatePowerPoint, generateHomePowerPoint } from '@/lib/powerpoint';
 import { UserMenu } from '@/components/UserMenu';
 import { LoginPage } from '@/components/LoginPage';
+import SmartImage from '@/components/SmartImage';
+import { useStoresHydrated } from '@/hooks/useStoresHydrated';
 import { 
   generateAnalysisEmailBody, 
   generateConclusionEmailBody, 
@@ -1423,7 +1425,7 @@ function IdentificationPhoto({
         >
           {imageData ? (
             <>
-              <img src={imageData} alt={label} className="w-full h-full object-cover" />
+              <SmartImage src={imageData} alt={label} className="w-full h-full" />
               <Button 
                 size="icon" 
                 className="absolute top-1 right-1 rounded-full bg-red-600 hover:bg-red-700 h-8 w-8 md:h-6 md:w-6" 
@@ -2272,11 +2274,11 @@ function HomeContent({ reportId, onRegenerateId }: { reportId: string; onRegener
                                 <AdditionalPartsSection parentPn={photo.pn} additionalParts={category.additionalParts} onAddPart={(part) => addAdditionalPartToCategory(category.id, part)} onRemovePart={(id) => removeAdditionalPartFromCategory(category.id, id)} t={t} />
                               )}
                             </div>
-                            <div className="relative h-40 bg-gray-200 flex items-center justify-center gap-1 cursor-pointer hover:bg-gray-300 transition-colors">
+                            <div className="relative h-40 bg-neutral-700 flex items-center justify-center gap-1 cursor-pointer hover:bg-neutral-600 transition-colors">
                               {/* Primeira foto */}
                               <div className="flex-1 h-full relative" onClick={() => { setShowPhotoOptions({ categoryId: category.id, photoId: photo.id }); }}>
                                 {photo.imageData ? (
-                                  <img src={photo.editedImageData || photo.imageData} alt={`${t('photos.photo')} ${index + 1}`} className="w-full h-full object-cover" />
+                                  <SmartImage src={photo.editedImageData || photo.imageData} alt={`${t('photos.photo')} ${index + 1}`} className="w-full h-full" />
                                 ) : (
                                   <div className="text-center text-gray-500 h-full flex flex-col items-center justify-center">
                                     <Camera className="h-10 w-10 mx-auto mb-1" />
@@ -2294,9 +2296,9 @@ function HomeContent({ reportId, onRegenerateId }: { reportId: string; onRegener
                               {/* Segunda foto (opcional) */}
                               {photo.secondaryImageData && (
                                 <>
-                                  <div className="w-px h-full bg-gray-300" />
+                                  <div className="w-px h-full bg-neutral-500" />
                                   <div className="flex-1 h-full relative" onClick={(e) => { e.stopPropagation(); }}>
-                                    <img src={photo.secondaryImageData} alt={`Foto 2`} className="w-full h-full object-cover" />
+                                    <SmartImage src={photo.secondaryImageData} alt={`Foto 2`} className="w-full h-full" />
                                     <div className="absolute top-1 right-1 flex gap-1">
                                       <Button size="icon" className="rounded-full bg-orange-500 hover:bg-orange-600 h-6 w-6" onClick={(e) => { e.stopPropagation(); setEditingPhoto({ categoryId: category.id, photo, editMode: 'secondary' }); }} title={t('action.edit')}><Edit className="h-3 w-3" /></Button>
                                       <Button size="icon" className="rounded-full bg-red-600 hover:bg-red-700 h-6 w-6" onClick={(e) => { e.stopPropagation(); updatePhotoInCategory(category.id, photo.id, { secondaryImageData: null }); }} title="Remover segunda foto"><Trash2 className="h-3 w-3" /></Button>
@@ -3518,11 +3520,11 @@ function InspecaoContent({ reportId, onRegenerateId }: { reportId: string; onReg
                   )}
                 </div>
                 {/* Área de foto(s) - 1 ou 2 lado a lado */}
-                <div className="relative h-48 bg-gray-200 flex items-center justify-center gap-1 cursor-pointer hover:bg-gray-300 transition-colors">
+                <div className="relative h-48 bg-neutral-700 flex items-center justify-center gap-1 cursor-pointer hover:bg-neutral-600 transition-colors">
                   {/* Primeira foto */}
                   <div className="flex-1 h-full relative" onClick={() => { setShowPhotoOptions(photo.id); }}>
                     {photo.imageData ? (
-                      <img src={photo.editedImageData || photo.imageData} alt={`${t('photos.photo')} ${index + 1}`} className="w-full h-full object-cover" />
+                      <SmartImage src={photo.editedImageData || photo.imageData} alt={`${t('photos.photo')} ${index + 1}`} className="w-full h-full" />
                     ) : (
                       <div className="text-center text-gray-500 h-full flex flex-col items-center justify-center">
                         <Camera className="h-10 w-10 mx-auto mb-1" />
@@ -3540,9 +3542,9 @@ function InspecaoContent({ reportId, onRegenerateId }: { reportId: string; onReg
                   {/* Segunda foto (opcional) */}
                   {photo.secondaryImageData && (
                     <>
-                      <div className="w-px h-full bg-gray-300" />
+                      <div className="w-px h-full bg-neutral-500" />
                       <div className="flex-1 h-full relative" onClick={(e) => { e.stopPropagation(); /* abrir opções para segunda foto */ }}>
-                        <img src={photo.secondaryImageData} alt={`Foto 2`} className="w-full h-full object-cover" />
+                        <SmartImage src={photo.secondaryImageData} alt={`Foto 2`} className="w-full h-full" />
                         <div className="absolute top-1 right-1 flex gap-1">
                           <Button size="icon" className="rounded-full bg-orange-500 hover:bg-orange-600 h-6 w-6" onClick={(e) => { e.stopPropagation(); setEditingPhoto({ photo, editMode: 'secondary' }); }} title={t('action.edit')}><Edit className="h-3 w-3" /></Button>
                           <Button size="icon" className="rounded-full bg-red-600 hover:bg-red-700 h-6 w-6" onClick={(e) => { e.stopPropagation(); updatePhoto(photo.id, { secondaryImageData: null }); }} title="Remover segunda foto"><Trash2 className="h-3 w-3" /></Button>
@@ -3804,6 +3806,7 @@ function InspecaoContent({ reportId, onRegenerateId }: { reportId: string; onReg
 // ============================================
 export default function TechnicalReportPage() {
   const { data: session, status } = useSession();
+  const hydrated = useStoresHydrated();
   const [activeTab, setActiveTab] = useState<'home' | 'inspecao'>(() => {
     // Check for openTabOnLoad on initial render
     if (typeof window !== 'undefined') {
@@ -3836,6 +3839,15 @@ export default function TechnicalReportPage() {
   // Show login page if not authenticated
   if (status === 'unauthenticated' || !session) {
     return <LoginPage onSuccess={() => window.location.reload()} />;
+  }
+
+  // Wait for stores to hydrate from IndexedDB before rendering
+  if (!hydrated) {
+    return (
+      <div className="min-h-screen bg-black flex items-center justify-center">
+        <div className="text-orange-500 animate-pulse text-xl">Carregando dados...</div>
+      </div>
+    );
   }
 
   return (
