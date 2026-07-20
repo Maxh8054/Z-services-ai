@@ -143,3 +143,21 @@ function createCanvas(w: number, h: number): HTMLCanvasElement {
   canvas.height = h;
   return canvas;
 }
+
+export interface ImageInfo {
+  width: number;
+  height: number;
+  isPortrait: boolean;
+}
+
+/**
+ * Load a base64 image and return its natural dimensions + orientation.
+ */
+export async function getImageInfo(base64DataUrl: string): Promise<ImageInfo> {
+  const img = await loadImage(base64DataUrl);
+  return {
+    width: img.naturalWidth,
+    height: img.naturalHeight,
+    isPortrait: img.naturalHeight > img.naturalWidth,
+  };
+}

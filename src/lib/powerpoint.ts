@@ -2,7 +2,13 @@ import pptxgen from 'pptxgenjs';
 import { saveAs } from 'file-saver';
 import type { InspectionData, PhotoData, AdditionalPart, PhotoCategory } from '@/types/report';
 import { t, type Language } from './translations';
-import { coverCropImage, maybeCoverCropImage } from './coverCrop';
+import { coverCropImage, maybeCoverCropImage, getImageInfo } from './coverCrop';
+
+// Photo dimensions in inches
+const PHOTO_LANDSCAPE_W = 4.4;
+const PHOTO_LANDSCAPE_H = 2.8;
+const PHOTO_PORTRAIT_W = 3.28;   // 8.3 cm
+const PHOTO_PORTRAIT_H = 3.27;   // 8.34 cm
 
 // Sanitize text for use in filenames
 function sanitizeForFilename(text: string): string {
@@ -178,6 +184,56 @@ function getCategoryTranslation(categoryId: string, language: Language): { title
   };
 }
 
+/**
+ * Detect photo orientation and return appropriate PPT dimensions.
+ */
+async function getPhotoDimensions(photo: PhotoData): Promise<{ w: number; h: number; isPortrait: boolean }> {
+  const imgData = photo.editedImageData || photo.imageData;
+  if (!imgData) return { w: PHOTO_LANDSCAPE_W, h: PHOTO_LANDSCAPE_H, isPortrait: false };
+  try {
+    const info = await getImageInfo(imgData);
+    return info.isPortrait
+      ? { w: PHOTO_PORTRAIT_W, h: PHOTO_PORTRAIT_H, isPortrait: true }
+      : { w: PHOTO_LANDSCAPE_W, h: PHOTO_LANDSCAPE_H, isPortrait: false };
+  } catch {
+    return { w: PHOTO_LANDSCAPE_W, h: PHOTO_LANDSCAPE_H, isPortrait: false };
+  }
+}
+
+/**
+ * Calculate x,y positions for 1 or 2 photos on a slide,
+ * centering them horizontally.
+ */
+function layoutPhotos(
+  dims1: { w: number; h: number } | null,
+  dims2: { w: number; h: number } | null,
+  y: number,
+  gap: number
+): Array<{ photo: PhotoData; x: number; y: number; w: number; h: number } | null> {
+  const result: Array<{ photo: PhotoData; x: number; y: number; w: number; h: number } | null> = [null, null];
+  
+  if (!dims1 && !dims2) return result;
+  
+  if (dims1 && !dims2) {
+    // Single photo: center it
+    result[0] = { photo: null!, x: (10 - dims1.w) / 2, y, w: dims1.w, h: dims1.h };
+    return result;
+  }
+  
+  if (dims1 && dims2) {
+    // Two photos: center them together
+    const totalW = dims1.w + gap + dims2.w;
+    const startX = (10 - totalW) / 2;
+    result[0] = { photo: null!, x: startX, y, w: dims1.w, h: dims1.h };
+    result[1] = { photo: null!, x: startX + dims1.w + gap, y, w: dims2.w, h: dims2.h };
+    return result;
+  }
+  
+  // Only dims2 (shouldn't happen)
+  result[1] = { photo: null!, x: (10 - dims2.w) / 2, y, w: dims2.w, h: dims2.h };
+  return result;
+}
+
 async function generateCategorySlides(
   pptx: pptxgen, 
   category: PhotoCategory, 
@@ -200,14 +256,19 @@ async function generateCategorySlides(
     const photo1 = photosWithImages[i * 2];
     const photo2 = photosWithImages[i * 2 + 1];
     
+    // Detect orientation for each photo
+    const dims1 = photo1 ? await getPhotoDimensions(photo1) : null;
+    const dims2 = photo2 ? await getPhotoDimensions(photo2) : null;
+    const positions = layoutPhotos(dims1, dims2, 1.7, 0.2);
+    
     // Photo 1
-    if (photo1?.imageData) {
-      await addPhotoToSlide(slide, photo1, 0.3, 1.7, 4.4, 2.8, language);
+    if (photo1?.imageData && positions[0]) {
+      await addPhotoToSlide(slide, photo1, positions[0].x, positions[0].y, positions[0].w, positions[0].h, language);
     }
     
     // Photo 2
-    if (photo2?.imageData) {
-      await addPhotoToSlide(slide, photo2, 4.9, 1.7, 4.4, 2.8, language);
+    if (photo2?.imageData && positions[1]) {
+      await addPhotoToSlide(slide, photo2, positions[1].x, positions[1].y, positions[1].w, positions[1].h, language);
     }
     
     addStandardFooter(slide);
@@ -681,14 +742,19 @@ async function generatePhotoSlides(pptx: pptxgen, photos: PhotoData[], language:
     const photo1 = photosWithImages[i * 2];
     const photo2 = photosWithImages[i * 2 + 1];
     
+    // Detect orientation for each photo
+    const dims1 = photo1 ? await getPhotoDimensions(photo1) : null;
+    const dims2 = photo2 ? await getPhotoDimensions(photo2) : null;
+    const positions = layoutPhotos(dims1, dims2, 1.6, 0.2);
+    
     // Photo 1
-    if (photo1?.imageData) {
-      await addPhotoToSlide(slide, photo1, 0.3, 1.6, 4.4, 2.8, language);
+    if (photo1?.imageData && positions[0]) {
+      await addPhotoToSlide(slide, photo1, positions[0].x, positions[0].y, positions[0].w, positions[0].h, language);
     }
     
     // Photo 2
-    if (photo2?.imageData) {
-      await addPhotoToSlide(slide, photo2, 4.9, 1.6, 4.4, 2.8, language);
+    if (photo2?.imageData && positions[1]) {
+      await addPhotoToSlide(slide, photo2, positions[1].x, positions[1].y, positions[1].w, positions[1].h, language);
     }
     
     addStandardFooter(slide);
