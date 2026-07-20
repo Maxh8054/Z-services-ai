@@ -7,8 +7,8 @@ import { coverCropImage, maybeCoverCropImage, getImageInfo } from './coverCrop';
 // Photo dimensions in inches
 const PHOTO_LANDSCAPE_W = 4.4;
 const PHOTO_LANDSCAPE_H = 2.8;
-const PHOTO_PORTRAIT_W = 3.28;   // 8.3 cm
-const PHOTO_PORTRAIT_H = 3.27;   // 8.34 cm
+const PHOTO_PORTRAIT_W = 3.27;   // 8.3 cm
+const PHOTO_PORTRAIT_H = 3.28;   // 8.34 cm
 
 // Sanitize text for use in filenames
 function sanitizeForFilename(text: string): string {
