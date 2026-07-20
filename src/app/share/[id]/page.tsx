@@ -26,7 +26,6 @@ import {
   FileJson,
   FileText
 } from 'lucide-react';
-import SmartImage from '@/components/SmartImage';
 import { useTranslation } from '@/store/translationStore';
 import { useHomeReportStore } from '@/store/homeReportStore';
 import { useReportStore } from '@/store/reportStore';
@@ -760,11 +759,11 @@ export default function SharedReportPage() {
                       {cat.photos && cat.photos.length > 0 && (
                         <div className="grid grid-cols-3 md:grid-cols-6 gap-2">
                           {cat.photos.map((photo: any, pIndex: number) => (
-                            <div key={pIndex} className="relative aspect-square rounded overflow-hidden bg-neutral-700">
-                              <SmartImage
-                                src={photo.imageData || photo.data}
+                            <div key={pIndex} className="relative aspect-square rounded overflow-hidden bg-gray-100">
+                              <img 
+                                src={photo.imageData || photo.data} 
                                 alt=""
-                                className="w-full h-full"
+                                className="w-full h-full object-cover"
                               />
                               {photo.pn && (
                                 <div className="absolute bottom-0 left-0 right-0 bg-black/60 text-white text-xs p-1 text-center">

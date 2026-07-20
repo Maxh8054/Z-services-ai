@@ -78,3 +78,31 @@ Stage Summary:
 - All photo rendering locations updated (6 files, 8+ img tags replaced)
 - Both features verified via agent-browser — app loads, both tabs work, no runtime errors
 - Lint passes cleanly
+---
+Task ID: 2
+Agent: Main Agent
+Task: Fix photo stretching in PowerPoint export
+
+Work Log:
+- Investigated pptxgenjs v4.0.1 source code and discovered a BUG in `sizing: { type: 'cover' }`
+- Root cause: `imgWidth` and `imgHeight` are initialized to display dimensions (`cx`, `cy`) instead of actual image natural dimensions
+- The `cover()` function receives `imgSize === boxDim`, resulting in 0% crop on all sides
+- All images get `<a:stretch/>` without any source rect — same as having no sizing at all = stretched
+- Reverted SmartImage component changes from web app (user wanted object-cover in app, fix is PPT only)
+- Created `/src/lib/coverCrop.ts` — utility that pre-processes base64 images using canvas:
+  - Loads image to get natural dimensions
+  - Draws with CSS "cover" logic (scale to fill, center, crop overflow) at 150 DPI
+  - Returns new base64 with correct aspect ratio matching the target box
+- Updated `/src/lib/powerpoint.ts`:
+  - Made `generateMachineIdentificationSlide`, `generateCategorySlides`, `generatePhotoSlides`, `addPhotoToSlide` async
+  - All 6 user-photo `addImage` calls now use `maybeCoverCropImage()` to pre-process
+  - Removed broken `sizing: { type: 'cover' }` from all user photos
+  - Added `await` to all async function calls in the generation pipeline
+  - Logo images kept with `sizing: { type: 'contain' }` (not the user's concern)
+- Verified: lint passes, dev server compiles, app loads and works correctly
+
+Stage Summary:
+- Bug: pptxgenjs v4.0.1 `sizing: { type: 'cover' }` is broken for base64 images
+- Fix: Pre-process images with canvas cover-crop before sending to pptxgenjs
+- Files changed: `src/lib/coverCrop.ts` (new), `src/lib/powerpoint.ts`
+- Web app reverted to original object-cover behavior

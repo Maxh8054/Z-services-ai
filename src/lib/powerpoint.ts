@@ -2,6 +2,7 @@ import pptxgen from 'pptxgenjs';
 import { saveAs } from 'file-saver';
 import type { InspectionData, PhotoData, AdditionalPart, PhotoCategory } from '@/types/report';
 import { t, type Language } from './translations';
+import { coverCropImage, maybeCoverCropImage } from './coverCrop';
 
 // Sanitize text for use in filenames
 function sanitizeForFilename(text: string): string {
@@ -94,9 +95,9 @@ export async function generatePowerPoint(options: PowerPointOptions): Promise<vo
   generateCoverSlide(pptx, finalInspection, language, reportId);
   
   // Slide de Identificação da Máquina (sempre gerado)
-  generateMachineIdentificationSlide(pptx, finalInspection, language);
+  await generateMachineIdentificationSlide(pptx, finalInspection, language);
   
-  generatePhotoSlides(pptx, finalPhotos, language);
+  await generatePhotoSlides(pptx, finalPhotos, language);
   generatePartsTableSlides(pptx, finalPhotos, additionalParts, language);
   
   if (finalConclusion.trim()) {
@@ -134,16 +135,16 @@ export async function generateHomePowerPoint(options: HomePowerPointOptions): Pr
   generateCoverSlide(pptx, finalInspection, language, reportId);
   
   // Slide de Identificação da Máquina (sempre gerado)
-  generateMachineIdentificationSlide(pptx, finalInspection, language);
+  await generateMachineIdentificationSlide(pptx, finalInspection, language);
   
   // Generate category slides
-  finalCategories.forEach((category, index) => {
+  for (const [index, category] of finalCategories.entries()) {
     const photosWithImages = category.photos.filter(p => p.imageData);
     if (photosWithImages.length > 0) {
-      generateCategorySlides(pptx, category, index + 1, language);
+      await generateCategorySlides(pptx, category, index + 1, language);
     }
-  });
-  
+  }
+
   // Collect all parts from all categories for the parts table
   const allPhotos: PhotoData[] = [];
   const allAdditionalParts: AdditionalPart[] = [];
@@ -177,7 +178,7 @@ function getCategoryTranslation(categoryId: string, language: Language): { title
   };
 }
 
-function generateCategorySlides(
+async function generateCategorySlides(
   pptx: pptxgen, 
   category: PhotoCategory, 
   categoryNumber: number,
@@ -201,12 +202,12 @@ function generateCategorySlides(
     
     // Photo 1
     if (photo1?.imageData) {
-      addPhotoToSlide(slide, photo1, 0.3, 1.7, 4.4, 2.8, language);
+      await addPhotoToSlide(slide, photo1, 0.3, 1.7, 4.4, 2.8, language);
     }
     
     // Photo 2
     if (photo2?.imageData) {
-      addPhotoToSlide(slide, photo2, 4.9, 1.7, 4.4, 2.8, language);
+      await addPhotoToSlide(slide, photo2, 4.9, 1.7, 4.4, 2.8, language);
     }
     
     addStandardFooter(slide);
@@ -388,7 +389,7 @@ function generateCoverSlide(pptx: pptxgen, inspection: InspectionData, language:
   addStandardFooter(slide);
 }
 
-function generateMachineIdentificationSlide(pptx: pptxgen, inspection: InspectionData, language: Language) {
+async function generateMachineIdentificationSlide(pptx: pptxgen, inspection: InspectionData, language: Language) {
   const isTranslated = language !== 'pt';
   const slide = pptx.addSlide();
   addStandardHeader(slide, isTranslated ? 'MACHINE IDENTIFICATION' : 'IDENTIFICAÇÃO DA MÁQUINA');
@@ -426,13 +427,13 @@ function generateMachineIdentificationSlide(pptx: pptxgen, inspection: Inspectio
   });
   
   if (inspection.machinePhoto) {
+    const processed = await maybeCoverCropImage(inspection.machinePhoto, { targetW: photoWidth, targetH: photoHeight });
     slide.addImage({
-      data: inspection.machinePhoto,
+      data: processed,
       x: photo1X,
       y: photoY,
       w: photoWidth,
       h: photoHeight,
-      sizing: { type: 'cover' },
     });
   } else {
     // Placeholder with camera icon
@@ -491,13 +492,13 @@ function generateMachineIdentificationSlide(pptx: pptxgen, inspection: Inspectio
   });
   
   if (inspection.horimetroPhoto) {
+    const processed = await maybeCoverCropImage(inspection.horimetroPhoto, { targetW: photoWidth, targetH: photoHeight });
     slide.addImage({
-      data: inspection.horimetroPhoto,
+      data: processed,
       x: photo2X,
       y: photoY,
       w: photoWidth,
       h: photoHeight,
-      sizing: { type: 'cover' },
     });
   } else {
     // Placeholder with camera icon
@@ -556,13 +557,13 @@ function generateMachineIdentificationSlide(pptx: pptxgen, inspection: Inspectio
   });
   
   if (inspection.serialPhoto) {
+    const processed = await maybeCoverCropImage(inspection.serialPhoto, { targetW: photoWidth, targetH: photoHeight });
     slide.addImage({
-      data: inspection.serialPhoto,
+      data: processed,
       x: photo3X,
       y: photoY,
       w: photoWidth,
       h: photoHeight,
-      sizing: { type: 'cover' },
     });
   } else {
     // Black background with white serial number text
@@ -612,13 +613,13 @@ function generateMachineIdentificationSlide(pptx: pptxgen, inspection: Inspectio
   });
   
   if (inspection.localPhoto) {
+    const processed = await maybeCoverCropImage(inspection.localPhoto, { targetW: photoWidth, targetH: photoHeight });
     slide.addImage({
-      data: inspection.localPhoto,
+      data: processed,
       x: photo4X,
       y: photoY,
       w: photoWidth,
       h: photoHeight,
-      sizing: { type: 'cover' },
     });
   } else {
     // Placeholder with camera icon
@@ -668,7 +669,7 @@ function generateMachineIdentificationSlide(pptx: pptxgen, inspection: Inspectio
   addStandardFooter(slide);
 }
 
-function generatePhotoSlides(pptx: pptxgen, photos: PhotoData[], language: Language) {
+async function generatePhotoSlides(pptx: pptxgen, photos: PhotoData[], language: Language) {
   const isTranslated = language !== 'pt';
   const photosWithImages = photos.filter(p => p.imageData);
   const slideCount = Math.ceil(photosWithImages.length / 2);
@@ -682,19 +683,19 @@ function generatePhotoSlides(pptx: pptxgen, photos: PhotoData[], language: Langu
     
     // Photo 1
     if (photo1?.imageData) {
-      addPhotoToSlide(slide, photo1, 0.3, 1.6, 4.4, 2.8, language);
+      await addPhotoToSlide(slide, photo1, 0.3, 1.6, 4.4, 2.8, language);
     }
     
     // Photo 2
     if (photo2?.imageData) {
-      addPhotoToSlide(slide, photo2, 4.9, 1.6, 4.4, 2.8, language);
+      await addPhotoToSlide(slide, photo2, 4.9, 1.6, 4.4, 2.8, language);
     }
     
     addStandardFooter(slide);
   }
 }
 
-function addPhotoToSlide(
+async function addPhotoToSlide(
   slide: pptxgen.Slide, 
   photo: PhotoData, 
   x: number, 
@@ -738,13 +739,13 @@ function addPhotoToSlide(
   
   // Primary Photo
   if (photo.imageData) {
+    const processed = await maybeCoverCropImage(photo.editedImageData || photo.imageData, { targetW: photoWidth, targetH: h });
     slide.addImage({
-      data: photo.editedImageData || photo.imageData || '',
+      data: processed || '',
       x: x,
       y: y,
       w: photoWidth,
       h: h,
-      sizing: { type: 'cover' },
     });
   }
   
@@ -752,14 +753,13 @@ function addPhotoToSlide(
   if (photo.secondaryImageData) {
     const secondX = hasSecondaryPhoto ? x + photoWidth + 0.1 : x;
     const secondW = hasSecondaryPhoto ? photoWidth : w;
-    
+    const processed = await maybeCoverCropImage(photo.secondaryImageData, { targetW: secondW, targetH: h });
     slide.addImage({
-      data: photo.secondaryImageData,
+      data: processed,
       x: secondX,
       y: y,
       w: secondW,
       h: h,
-      sizing: { type: 'cover' },
     });
   }
   
