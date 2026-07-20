@@ -2217,7 +2217,7 @@ function HomeContent({ reportId, onRegenerateId }: { reportId: string; onRegener
                   </CollapsibleTrigger>
                   <CollapsibleContent>
                     <CardContent className="pt-0">
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                         {category.photos.map((photo, index) => (
                           <Card key={photo.id} className="overflow-hidden group border-2 border-gray-200">
                             <div className="p-3 bg-black/5 space-y-2">
@@ -3456,7 +3456,7 @@ function InspecaoContent({ reportId, onRegenerateId }: { reportId: string; onReg
             <Button onClick={() => addPhoto()} className="bg-green-600 hover:bg-green-700"><Plus className="h-4 w-4 mr-2" />{t('photos.addPhoto')}</Button>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {photos.map((photo, index) => (
               <Card key={photo.id} className="overflow-hidden group">
                 <div className="p-3 bg-black/10 space-y-2">
