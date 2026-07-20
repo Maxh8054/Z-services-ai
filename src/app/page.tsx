@@ -1804,6 +1804,21 @@ function HomeContent({ reportId, onRegenerateId }: { reportId: string; onRegener
         // Import categories with all photos and additional parts
         if (data.categories && Array.isArray(data.categories)) {
           setCategories(data.categories);
+          // Auto-expand sub-parts sections for photos that have them
+          const expandMap: Record<string, boolean> = {};
+          data.categories.forEach((cat: any) => {
+            if (cat.additionalParts && cat.additionalParts.length > 0) {
+              const parentPns = new Set(cat.additionalParts.map((p: any) => p.parentPn));
+              cat.photos.forEach((photo: any) => {
+                if (photo.pn && parentPns.has(photo.pn)) {
+                  expandMap[`${cat.id}-${photo.id}`] = true;
+                }
+              });
+            }
+          });
+          if (Object.keys(expandMap).length > 0) {
+            setShowAdditionalParts(prev => ({ ...prev, ...expandMap }));
+          }
         }
         // Import conclusion
         if (data.conclusion !== undefined) setConclusion(data.conclusion);
@@ -2831,6 +2846,18 @@ function InspecaoContent({ reportId, onRegenerateId }: { reportId: string; onReg
         // Import additional parts
         if (data.additionalParts && Array.isArray(data.additionalParts)) {
           setAdditionalParts(data.additionalParts);
+          // Auto-expand sub-parts sections for photos that have them
+          const importedPhotos = data.photos || photos;
+          const expandMap: Record<string, boolean> = {};
+          const parentPns = new Set(data.additionalParts.map((p: any) => p.parentPn));
+          importedPhotos.forEach((photo: any) => {
+            if (photo.pn && parentPns.has(photo.pn)) {
+              expandMap[photo.id] = true;
+            }
+          });
+          if (Object.keys(expandMap).length > 0) {
+            setShowAdditionalParts(prev => ({ ...prev, ...expandMap }));
+          }
         }
         // Import conclusion
         if (data.conclusion !== undefined) setConclusion(data.conclusion);

@@ -349,6 +349,7 @@ export default function SharedReportPage() {
       inspecaoStore.loadFromData({
         inspection: editedData.inspection,
         photos: editedData.photos,
+        additionalParts: editedData.additionalParts,
         conclusion: editedData.conclusion,
       });
     }

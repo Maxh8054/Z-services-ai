@@ -86,8 +86,8 @@ interface ReportState {
   clearAll: () => void;
   
   // External data loading
-  loadFromData: (data: { inspection?: Partial<InspectionData>; photos?: PhotoData[]; conclusion?: string }) => void;
-  mergeFromData: (data: { inspection?: Partial<InspectionData>; photos?: PhotoData[]; conclusion?: string }, serverTimestamp?: number) => void;
+  loadFromData: (data: { inspection?: Partial<InspectionData>; photos?: PhotoData[]; additionalParts?: AdditionalPart[]; conclusion?: string }) => void;
+  mergeFromData: (data: { inspection?: Partial<InspectionData>; photos?: PhotoData[]; additionalParts?: AdditionalPart[]; conclusion?: string }, serverTimestamp?: number) => void;
   getAllData: () => { inspection: InspectionData; photos: PhotoData[]; conclusion: string };
   setLastLocalEdit: (timestamp: number) => void;
 }
@@ -257,16 +257,17 @@ export const useReportStore = create<ReportState>()(
       setTranslation: (translation) => set({ translation }),
       
       // Load from external data (shared session) - substitui tudo
-      loadFromData: (data: { inspection?: Partial<InspectionData>; photos?: PhotoData[]; conclusion?: string }) =>
+      loadFromData: (data: { inspection?: Partial<InspectionData>; photos?: PhotoData[]; additionalParts?: AdditionalPart[]; conclusion?: string }) =>
         set({
           inspection: data.inspection ? { ...initialInspection, ...data.inspection } : initialInspection,
           photos: data.photos || createInitialPhotos(4),
+          additionalParts: data.additionalParts || [],
           conclusion: data.conclusion || '',
         }),
       
       // Merge inteligente - SÓ aceita dados do servidor se forem MAIS RECENTES que a edição local
       // Isso garante que a ÚLTIMA modificação sempre vença
-      mergeFromData: (data: { inspection?: Partial<InspectionData>; photos?: PhotoData[]; conclusion?: string }, serverTimestamp?: number) =>
+      mergeFromData: (data: { inspection?: Partial<InspectionData>; photos?: PhotoData[]; additionalParts?: AdditionalPart[]; conclusion?: string }, serverTimestamp?: number) =>
         set((state) => {
           const serverTime = serverTimestamp || Date.now();
           const localEditTime = state.lastLocalEdit || 0;
@@ -306,6 +307,13 @@ export const useReportStore = create<ReportState>()(
             hasChanges = true;
           }
           
+          // Merge das peças adicionais (subpeças) - servidor tem prioridade
+          let newAdditionalParts = state.additionalParts;
+          if (data.additionalParts && data.additionalParts.length > 0) {
+            newAdditionalParts = data.additionalParts;
+            hasChanges = true;
+          }
+          
           // Merge da conclusão - servidor tem prioridade pois é mais recente
           let newConclusion = state.conclusion;
           if (data.conclusion && data.conclusion.trim() !== '') {
@@ -322,6 +330,7 @@ export const useReportStore = create<ReportState>()(
           return {
             inspection: newInspection,
             photos: newPhotos,
+            additionalParts: newAdditionalParts,
             conclusion: newConclusion,
             lastServerDataTime: serverTime,
           };
