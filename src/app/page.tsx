@@ -17,6 +17,7 @@ import { generatePowerPoint, generateHomePowerPoint } from '@/lib/powerpoint';
 import { UserMenu } from '@/components/UserMenu';
 import { LoginPage } from '@/components/LoginPage';
 import { useStoresHydrated } from '@/hooks/useStoresHydrated';
+import { usePersistedState } from '@/hooks/usePersistedState';
 import { 
   generateAnalysisEmailBody, 
   generateConclusionEmailBody, 
@@ -1527,7 +1528,7 @@ function HomeContent({ reportId, onRegenerateId }: { reportId: string; onRegener
 
   const [expandedCategories, setExpandedCategories] = useState<Record<string, boolean>>({});
   const [showPhotoOptions, setShowPhotoOptions] = useState<{ categoryId: string; photoId: string } | null>(null);
-  const [showAdditionalParts, setShowAdditionalParts] = useState<Record<string, boolean>>({});
+  const [showAdditionalParts, setShowAdditionalParts] = usePersistedState<Record<string, boolean>>('home-subparts-open', {});
   const [showClearConfirm, setShowClearConfirm] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [editingPhoto, setEditingPhoto] = useState<{ categoryId: string; photo: PhotoData; editMode: 'primary' | 'secondary' | 'dual' } | null>(null);
@@ -2708,7 +2709,7 @@ function InspecaoContent({ reportId, onRegenerateId }: { reportId: string; onReg
   const { language, t } = useTranslation();
 
   const [showPhotoOptions, setShowPhotoOptions] = useState<string | null>(null);
-  const [showAdditionalParts, setShowAdditionalParts] = useState<Record<string, boolean>>({});
+  const [showAdditionalParts, setShowAdditionalParts] = usePersistedState<Record<string, boolean>>('insp-subparts-open', {});
   const [showClearConfirm, setShowClearConfirm] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [editingPhoto, setEditingPhoto] = useState<{ photo: PhotoData; editMode: 'primary' | 'secondary' | 'dual' } | null>(null);
