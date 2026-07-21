@@ -263,12 +263,12 @@ async function generateCategorySlides(
     
     // Photo 1
     if (photo1?.imageData && positions[0]) {
-      await addPhotoToSlide(slide, photo1, positions[0].x, positions[0].y, positions[0].w, positions[0].h, language);
+      await addPhotoToSlide(slide, photo1, positions[0].x, positions[0].y, positions[0].w, positions[0].h, language, String(i * 2 + 1));
     }
     
     // Photo 2
     if (photo2?.imageData && positions[1]) {
-      await addPhotoToSlide(slide, photo2, positions[1].x, positions[1].y, positions[1].w, positions[1].h, language);
+      await addPhotoToSlide(slide, photo2, positions[1].x, positions[1].y, positions[1].w, positions[1].h, language, String(i * 2 + 2));
     }
     
     addStandardFooter(slide);
@@ -749,12 +749,12 @@ async function generatePhotoSlides(pptx: pptxgen, photos: PhotoData[], language:
     
     // Photo 1
     if (photo1?.imageData && positions[0]) {
-      await addPhotoToSlide(slide, photo1, positions[0].x, positions[0].y, positions[0].w, positions[0].h, language);
+      await addPhotoToSlide(slide, photo1, positions[0].x, positions[0].y, positions[0].w, positions[0].h, language, String(i * 2 + 1));
     }
     
     // Photo 2
     if (photo2?.imageData && positions[1]) {
-      await addPhotoToSlide(slide, photo2, positions[1].x, positions[1].y, positions[1].w, positions[1].h, language);
+      await addPhotoToSlide(slide, photo2, positions[1].x, positions[1].y, positions[1].w, positions[1].h, language, String(i * 2 + 2));
     }
     
     addStandardFooter(slide);
@@ -768,7 +768,8 @@ async function addPhotoToSlide(
   y: number, 
   w: number, 
   h: number,
-  language: Language
+  language: Language,
+  photoRef: string
 ) {
   const isTranslated = language !== 'pt';
   
@@ -829,6 +830,29 @@ async function addPhotoToSlide(
     });
   }
   
+  // Photo reference badge
+  const refLabel = isTranslated ? `Photo ${photoRef}` : `Foto ${photoRef}`;
+  slide.addShape(slide._slideLayout?._presLayout?.pptx?.ShapeType?.rect || 'rect', {
+    x: x + 0.08,
+    y: y + h - 0.38,
+    w: 0.7,
+    h: 0.3,
+    fill: { color: '000000', transparency: 40 },
+    rectRadius: 0.04,
+  });
+  slide.addText(refLabel, {
+    x: x + 0.08,
+    y: y + h - 0.38,
+    w: 0.7,
+    h: 0.3,
+    fontSize: 8,
+    color: 'FFFFFF',
+    fontFace: 'Arial',
+    bold: true,
+    align: 'center',
+    valign: 'middle',
+  });
+
   // Description
   if (photo.description) {
     slide.addShape(slide._slideLayout?._presLayout?.pptx?.ShapeType?.rect || 'rect', {
