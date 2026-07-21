@@ -884,6 +884,7 @@ interface PartRow {
   isSubPart: boolean;
   parentPn?: string;
   indent: number;
+  photoRef?: string;
 }
 
 function generatePartsTableSlides(
@@ -893,6 +894,13 @@ function generatePartsTableSlides(
   language: Language
 ) {
   const isTranslated = language !== 'pt';
+  // Build photo ref map (same numbering as generatePhotoSlides)
+  const photosWithImages = photos.filter(p => p.imageData);
+  const photoRefMap = new Map<string, string>();
+  photosWithImages.forEach((p, idx) => {
+    photoRefMap.set(p.pn, String(idx + 1));
+  });
+
   // Build hierarchical parts structure
   const partRows: PartRow[] = [];
   
@@ -908,6 +916,7 @@ function generatePartsTableSlides(
         quantity: photo.quantity || '-',
         isSubPart: false,
         indent: 0,
+        photoRef: photoRefMap.get(photo.pn),
       });
       
       // Find and add all sub-parts for this main part
@@ -921,6 +930,7 @@ function generatePartsTableSlides(
           isSubPart: true,
           parentPn: photo.pn,
           indent: 1,
+          photoRef: photoRefMap.get(photo.pn),
         });
       });
     });
@@ -978,10 +988,11 @@ function generatePartsTableSlides(
     });
     
     const headers = [
-      { text: isTranslated ? 'PN (Serial)' : 'PN (Serial)', x: 0.5, w: 2.5 },
-      { text: isTranslated ? 'Part Name' : 'Nome da Peça', x: 3, w: 3 },
-      { text: isTranslated ? 'Qty' : 'Qtd', x: 6, w: 1 },
-      { text: isTranslated ? 'Type' : 'Tipo', x: 7, w: 2.5 },
+      { text: isTranslated ? 'Ref' : 'Ref', x: 0.5, w: 0.6 },
+      { text: isTranslated ? 'PN (Serial)' : 'PN (Serial)', x: 1.1, w: 2.2 },
+      { text: isTranslated ? 'Part Name' : 'Nome da Peça', x: 3.3, w: 2.6 },
+      { text: isTranslated ? 'Qty' : 'Qtd', x: 5.9, w: 1 },
+      { text: isTranslated ? 'Type' : 'Tipo', x: 6.9, w: 2.6 },
     ];
     
     headers.forEach(header => {
@@ -1018,10 +1029,27 @@ function generatePartsTableSlides(
         line: part.isSubPart ? { color: 'FFE0B2', width: 0.5 } : undefined,
       });
       
+      // Ref column (Foto X)
+      const refText = part.photoRef 
+        ? (isTranslated ? `Photo ${part.photoRef}` : `Foto ${part.photoRef}`)
+        : '-';
+      slide.addText(refText, {
+        x: 0.5,
+        y: rowY + 0.05,
+        w: 0.6,
+        h: rowHeight - 0.1,
+        fontSize: part.isSubPart ? 8 : 9,
+        color: part.photoRef ? 'FF6600' : '999999',
+        fontFace: 'Arial',
+        align: 'center',
+        valign: 'middle',
+        bold: !!part.photoRef,
+      });
+
       // Sub-part indicator (arrow or dash)
       if (part.isSubPart) {
         slide.addText('└─', {
-          x: 0.5,
+          x: 1.1,
           y: rowY + 0.05,
           w: 0.3,
           h: rowHeight - 0.1,
@@ -1034,14 +1062,14 @@ function generatePartsTableSlides(
       }
       
       // Part Number with Serial (with indent for sub-parts)
-      const pnX = part.isSubPart ? 0.75 : 0.5;
+      const pnX = part.isSubPart ? 1.35 : 1.1;
       const pnText = part.serialNumber 
         ? `${part.pn} (${part.serialNumber})`
         : part.pn;
       slide.addText(pnText, {
         x: pnX,
         y: rowY + 0.05,
-        w: part.isSubPart ? 2.25 : 2.5,
+        w: part.isSubPart ? 1.95 : 2.2,
         h: rowHeight - 0.1,
         fontSize: part.isSubPart ? 8 : 9,
         color: part.isSubPart ? 'CC5200' : '000000',
@@ -1053,9 +1081,9 @@ function generatePartsTableSlides(
       
       // Part Name
       slide.addText(part.partName, {
-        x: 3,
+        x: 3.3,
         y: rowY + 0.05,
-        w: 3,
+        w: 2.6,
         h: rowHeight - 0.1,
         fontSize: part.isSubPart ? 8 : 9,
         color: part.isSubPart ? '666666' : '000000',
@@ -1067,7 +1095,7 @@ function generatePartsTableSlides(
       
       // Quantity
       slide.addText(part.quantity, {
-        x: 6,
+        x: 5.9,
         y: rowY + 0.05,
         w: 1,
         h: rowHeight - 0.1,
@@ -1084,9 +1112,9 @@ function generatePartsTableSlides(
         : (isTranslated ? 'Main' : 'Principal');
       
       slide.addText(typeText, {
-        x: 7,
+        x: 6.9,
         y: rowY + 0.05,
-        w: 2.5,
+        w: 2.6,
         h: rowHeight - 0.1,
         fontSize: part.isSubPart ? 8 : 9,
         color: part.isSubPart ? 'FF6600' : '000000',
