@@ -160,3 +160,23 @@ Stage Summary:
 - Photos in Identificação da Máquina now use absolute positioning to fill the box completely
 - Registro Fotográfico photos are 50% larger (h-40→h-60 on home, h-48→h-72 on inspeção)
 - Double photo edit bug was already resolved in the codebase
+
+---
+Task ID: 2
+Agent: main
+Task: Make PPT dual photos much bigger - full slide width
+
+Work Log:
+- Increased photo dimensions: landscape 4.4x2.8 → 4.6x4.5, portrait 3.27x3.28 → 3.4x4.5
+- Added DUAL_PHOTO_W (9.7") and DUAL_PHOTO_H (4.5") constants for dual photo slides
+- Reduced SLIDE_MARGIN from 0.3 to 0.15 for all headers/footers/separators
+- Rewrote generateCategorySlides: dual photos get their own full-width slide
+- Rewrote generatePhotoSlides (inspeção): same dual photo treatment
+- Increased dual photo gap from 0.1 to 0.15 for better separation
+- Single photos still pair 2-per-slide with larger dimensions
+
+Stage Summary:
+- Dual photos: each half now ~4.78" wide (was ~2.15") — 2.2x bigger
+- Single photos: 4.6x4.5" (was 4.4x2.8") — 60% taller
+- Lateral margins reduced from 0.3" to 0.15" for more photo space
+- No lint errors, compiles cleanly

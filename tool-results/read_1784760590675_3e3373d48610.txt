@@ -1,0 +1,1412 @@
+     1→import pptxgen from 'pptxgenjs';
+     2→import { saveAs } from 'file-saver';
+     3→import type { InspectionData, PhotoData, AdditionalPart, PhotoCategory } from '@/types/report';
+     4→import { getSubPartsForPhoto, photoShouldBeInPartsTable, getDisplayPn } from './partsUtils';
+     5→import { t, type Language } from './translations';
+     6→import { coverCropImage, maybeCoverCropImage, getImageInfo } from './coverCrop';
+     7→
+     8→// Photo dimensions in inches
+     9→const SLIDE_MARGIN = 0.15;  // Reduced lateral margin
+    10→const PHOTO_LANDSCAPE_W = 4.6;
+    11→const PHOTO_LANDSCAPE_H = 4.5;
+    12→const PHOTO_PORTRAIT_W = 3.4;
+    13→const PHOTO_PORTRAIT_H = 4.5;
+    14→// Full-width dimensions for dual (side-by-side) photos
+    15→const DUAL_PHOTO_W = 10 - SLIDE_MARGIN * 2;  // ~9.7"
+    16→const DUAL_PHOTO_H = 4.5;
+    17→
+    18→// Sanitize text for use in filenames
+    19→function sanitizeForFilename(text: string): string {
+    20→  return text
+    21→    .trim()
+    22→    .substring(0, 60)
+    23→    .replace(/[<>:"/\\|?*\x00-\x1f]/g, '')
+    24→    .replace(/\s+/g, '_')
+    25→    .replace(/_+/g, '_')
+    26→    .replace(/^_|_$/g, '')
+    27→    || 'Inspecao';
+    28→}
+    29→
+    30→// Helper function to generate a black image with white text
+    31→function generateSerialNumberImage(serialNumber: string): string {
+    32→  const canvas = document.createElement('canvas');
+    33→  const width = 400;
+    34→  const height = 400;
+    35→  canvas.width = width;
+    36→  canvas.height = height;
+    37→  const ctx = canvas.getContext('2d');
+    38→  
+    39→  if (ctx) {
+    40→    // Black background
+    41→    ctx.fillStyle = '#000000';
+    42→    ctx.fillRect(0, 0, width, height);
+    43→    
+    44→    // White text
+    45→    ctx.fillStyle = '#FFFFFF';
+    46→    ctx.font = 'bold 48px Arial';
+    47→    ctx.textAlign = 'center';
+    48→    ctx.textBaseline = 'middle';
+    49→    
+    50→    // Draw serial number
+    51→    const displayText = serialNumber || 'N/A';
+    52→    ctx.fillText(displayText, width / 2, height / 2);
+    53→  }
+    54→  
+    55→  return canvas.toDataURL('image/png');
+    56→}
+    57→
+    58→// Logo placeholder (base64) - Replace with actual logo
+    59→const LOGO_BASE64 = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAANgAAAB6CAYAAADd9J0IAAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAJcEhZcwAAEnQAABJ0Ad5mH3gAACsKSURBVHhe7Z15dFPnmf+/V6t3Wd4kWbK8yQveILENxGZLCXTKZCmEzDk9IYHQMCdhptOemfZkYzrktOdMmqacmfRMeqbJJCRtzqRkgwBNm+RHgCSAk9gY2xLYeMOyLS+SJS/al/f3h3XvWLLulWxsFvt+znkPWHfR1Xvf77s87/M+L0UIIeDh4VkUBOEf8PDwLBy8wHh4FhFeYDw8iwgvMB6eRYQXGA/PIsILjIdnEeEFxsOziPAC4+FZRHiB8fAsIrzAeHgWEV5gPDyLCMX7Is4DrwPwOAHina6jRBJAkgQIROFn8ixzeIHNBccYMNYNmDuAySHAawcEQiBeDqTmAZklQIoaEEnDr+RZpvACiwkCWDoB/TGQ7s8Baw8o9yQQ8AAQgAilQGI6oFkNqmIHoK0HJAnhN+FZhvACi4WRy8DFtwD9h4C1B/B7ADKtO9C5RwFIlAN5G4Hax4GCjdPdRp5lDS+waEwMAE1vAY2Hp7uGFACBZFpZlAgkQQ4qo3i6W2i5CrgmgYJNwNongdx6QCgJvyPPMoK3InLhcwN9DUDHX4Dx/mkjhlACUBQQ8ANiKaC9C1i7H7j7WWDVLiBOBvScBTo+AcYHAL7+WtbwAuNiYgDo/xqwdAEB77SwQE0fIwFAJAWlqJgec+VtAHLXgSRlAS4bMNgEmNunr+NZtvAC42JiINjts03/TQXFBQCUAPB7p8+x9gA247TxwzMJEP90i2e9Bvh4gS1neIFx4RoHHNZpowbwf60XMG2e97qA3i+A8y8D/+954OIfAVv/tOHDYwec1qClkWe5wgssKixjKEoAEN9069X+Z6D1yHR30j05Q4gs1/IsG3iBcSGVTU8iC8XhR4IEheRzAz7ntEGDHqaJEwFpCiBgu5ZnOcALjItUDZBeDEhSplujiBZBanpsRgmm/yUEIAGQFBWITAOIeIEtZ3iBcSHLAVFXg8jzplsi4g8/IwjdbAWme4WSJEBZCWSW8vNgyxxeYFwIRKByakHptgCJmdOtU8AXflYQAvh9046/6lpQhd8BJc8LNYzwLDt4gUVDlgOUPQCU3gvINNMTzF73tIk+4J8WnNcNeDzT467ceuDORwFtHe/0y8O7SsWEzw2YWoCrHwO9XwLmq4DDAvhcgFA0PUZLUQOaaqDou0D+hukWj2fZwwssVgiZnhcbMQB954Dh1uk5Mkk8IC8ANLVA9h1AigoQxoVfzbNM4QU2H3x2wOuc7iYKhIAoDpAkAhCGn8mzzOEFNg/sHgK314cAIZCIxYiTUuBthTyR4AUWBZPJhKtXr6K3txcmkwk2mw0ulwsejweBQABisRhSqRRJSUnIzMyEVquFTqeDTqeDSMSHEFju8AILY3JyEqOjozCZTOjp6UFLSwsuXbqEK1euoL+/H4FAIPwSBplMhqKiIlRVVaG6uhqlpaXQarVQKBRITk4OP51nGcALDAAhBGazGd3d3Whra8M333yDxsZGdHR0YHJyEvPJovj4eOTn52Pt2rVYt24dqqurUVhYiMTExPBTeZYwy15gTqcTly5dwqeffoovvvgCnZ2dGBkZgd1uDz+VFSq4jCVSVsbHx0Oj0aC2thbf//73sXnzZqSlpYWfxrNEWdYC6+3txbFjx3DixAkYDAYMDQ3N6gJSFAWKomZ9PpO0tDRUVVVBqVSir68P7e3tsFgsIeckJiaioqICDz/8MHbu3AmVShVynGdpsiwFNj4+jsbGRnz00Uc4ceIEurq6mGMURUGr1aKwsBAqlQoDAwNobm6GzRZcdBmB3Nxc7Nq1C9u2bcPU1BSuXr2K1tZWtLa24sqVKxgbG2POraiowN69e7Fz505oNBqm9eNZmggPHjx4MPzDpczAwACOHz+O//7v/8bx48cxNDQEBIWl0+lwzz33YPv27di5cydWrVqF0dFRGAwGOJ3O8FsxyOVybNiwAd/73vdQVlaG1atXY+XKlSgoKEBKSgocDgesVisCgQBGRkYwMjICuVyO3NxcJCTw4d2WMstKYCaTCUeOHMGrr76Kc+fOwe12AwCSkpJQV1eHPXv24LHHHsOWLVug0+lgMBhw/PhxtLe3h98qhNTUVNTU1GDlypWMYGQyGUpKSlBWVob09HSYzWamCzo+Pg6fz4f8/Hzk5ORAIOBdQpcqy+bN0uJ688030dzcDEIIKIpCYWEhHn/8cfziF7/AY489hrKyMiQkJMBms6G1tRVdXV0RjRfhEEJmjdMoikJubi4eeugh7N27F9XV1RAIBHA6nWhsbMTnn3+OgYGBkGt4lhbLQmAmkwnHjh3DW2+9hdbWVhBCIJFIUFdXhx/96EfYv38/1q1bh6Sk6UChgUAAXV1daGlpwfDwcPjt5oxcLsd3v/td3HvvvcjLywMADA8P4/z589Dr9fB6+cA4S5UlLzCHw4GzZ8/iD3/4A5qbm+H3+yGRSLBx40b86Ec/wsMPP4yioqKQa1wuF/R6Pa5evbpghT87Oxv33HMP1q5di4SEBPj9frS2tqKlpQXj4+Php/MsEZa8wPR6PT766CM0NTUhEAhAKpWivr4ef//3f4/77rsPGRkZ4ZfAarWipaUF/f394YfmDUVRKC0txerVqxkT/ejoKDo7OzE8PBxTN5Tn9mNJC2x8fByff/45vvrqK7hcLlAUhaqqKuzZswdbt26NaMELBALo7OyEwWCA1WoNP3xd0K5UarUaFEWBEIKhoSEMDw/D72cLR8BzO7NkBeb3+9HQ0IDPP/8cRqMRAKBUKrFt2zZs2rQJKSkp4ZcAwdaroaEB3d3di1LoMzIykJWVBbF4OhjO5OQkY1XkWXosWYGNj4/j9OnTuHjxIgKBAOLi4lBbW4vNmzdDo9GEn85gNBrx9ddfM/NjC41UKkVCQgLjae/1euH1evku4hJlSQrM7/ejs7MTLS0tGB0dBQCoVCps3boVZWVlrPNOdrsdLS0tuHz58px8EeeCz+eD2+1mWiyxWAyxWMx7dCxRIpe02xyXy4X29nYMDAwwa7bKy8tRW1sLuVwefjqD0WhEY2MjTCZT+KEFY2xsDGazmbFOpqSkQCaT8WvHlihLUmBOpxMmk4lxuE1LS0NlZSVUKhVr6+X3+9HV1QWDwYDJycnwwwvC1NQUurq60N/fz0x0K5VKKBQKXmBLlMil7TbH7XbDZrMx/oOpqanQarWshg0AsNlsuHz5Mjo7OxfN4NDd3Y2mpibG6JKVlYWCggJkZvIRqJYqS1JggUAAPp+PsQKKxWIkJCQwlrtI9Pf3w2AwMGO2hcZms+HcuXNoaGiAw+GASCRCeXk5qqqq+PVhS5glKTCRSASpVBpiqbPb7ZwtU0dHB9ra2ji95q+HhoYGnDhxAlevXgUAZGZmoq6uDhUVFXz3cAmzJAUmlUohl8uZiWSLxYKuri5Wl6SpqSno9Xr09PTMcti9XrxeLxobG3HkyBFcuHABTqcTIpEIVVVVWL9+PZRKZfglPEuIJSmwuLg4aDQaxg3KYrHg4sWL6OjogMcTuiEeIQSXLl1aFJ9Ap9OJL7/8Eq+88go+/vhjxuhSUFCAe+65B1VVVZBK+fDaS5klKbD4+HiUlpaioKAAUqkUhBC0tbXhL3/5C3p6ekLOnZiYwIULF67bq52iqBAL5dDQED788EO8/PLLOHr0KGP6z8rKwpYtW7B161ZkZWXNuAPPUmRJCoyiKOTn52PNmjXIyckBgo61J0+exGeffRayhN9oNOLixYvX7dgrEAiY1qipqQmHDh3CCy+8gL/+9a/M98lkMmzbtg2PPPIISktLWacMeJYOS3ZFMx0MtL+/Hx0dHfB6vbBarbBarUhISIBWq4VYLMb58+dx9OhRXLt2LfwWMZOamoqSkhJIpVKcOXMGb7zxBj744AP09vYyhpW0tDT87d/+LX74wx/irrvu4g0by4QlKzAASE9Ph9/vR39/P4aHh+H1ejE0NITBwUEEAgFYLBacOXMG586dw9TUVPjlMSMSieD1etHc3IwPPvgAX375JRwOB3Nco9Hg/vvvx549e7B27VrO6QKepcWiRJXy+/3wer0LapETiUTz8tnr7+/Hq6++itdeew2Dg4PM51qtFmq1GmNjY+jt7WXic4QjEAggEAjg9/tZHXIlEgkEAgG8Xm+IB75EIkFpaSm2b9+OBx54AOXl5ZBIpqPYz5yrY7tvJCiKglgsnlMLSAiB1+uFz+djwtBx5SMhhPE0EYlEEAqFzPn0c9Pvlv6c/g0ikWhOz7bUWRSBGQwGtLS0YGpqinlR84UQAr/fD61WizvvvBNZWVlzGrsYjUYcPnwYr732Gvr6+pjP6YIQLoqZyGQy6HQ6JCUl4dq1axgYGIhoCElOTkZcXBwcDkeIk3B+fj4ee+wxPP7441AqlSGFdHBwEC0tLTCZTPD7/TH9JnpVQE5ODioqKpCRkRE1b+kWvK2tDSaTCRKJBEKhEELh9E4wAoGAWZtGJ5/PB5/PB7FYjNzcXJSXl0Mul8Pr9aKvr49ZKycWi5nnprvCeXl5qKiogEwmC3mO5cqCC8xut+N3v/sdDh8+DLfbvSACI4SgsrISTzzxBDZu3Ij4+Pjw02bh9Xqh1+tx7NgxHD9+PCT0WnFxMRQKBQYHB3Ht2rWIE9ASiQSbN2/G7t27IZPJ8N577+H999+PGB8xNzcXdXV1EIvF+PLLL9HT0wNCCNLT07Fjxw7s378/ZELZbrfj008/xe9//3tcvXo15jwihEAoFKK0tBT79u3Dd77znYiLRmdis9lw5MgRvPPOOzAajUyLPLMVowWGGfnt9/shFotRV1eHffv2YfXq1bBarXj//ffx9ttvY3BwMKRloyuJDRs24Ic//CET4GfZQxYYs9lMnnjiCTK9afHCJZ1ORw4fPkwmJibCv3IWk5OT5NixY+TRRx8larU65D41NTXkxRdfJL/85S/JqlWriFgsnvVdAIhCoSAHDx4k4+PjxGKxkJ///OckMzNz1nkASFFREfnVr35FPv30U/LTn/405DtVKhXZvXs3OX36NHG73YQQQqxWK/mv//ovkp2dPetesaTU1FTy4osvkuHh4fCfPotr166RJ598kkil0ln3iSWtXbuWfPzxx4QQQkwmEzlw4ABJSUmZdR6d1q9fT/785z8Tn88X/ijLkkWpYqRSKdMFWSji4+MhEok4a3oSXIL//vvv4+WXX8a7777LhEWLj4/Hpk2bsH//fvzN3/wNBAIBY/gIhwp6uRcUFCAuLg4WiwU2my1iS4dgaykUClFVVYVdu3Zh+/btTNwNk8mEo0eP4s0330RjYyN8Ph+EQiHEYnFMLXEkCCEYGxuLapghhMBms2FiYmJerYlAIEB8fDzzLimKgkQiYd3AgqKokPN5ltg8mNfrxeeff47f/va3OH36NNMlTE9Px7Zt2/Czn/0MO3fuZMICsMXckEgkyMnJQW5uLiQSCZxOJyYmJlgFhuAYRCKRoKqqCnv37sWOHTsYkY2Pj+PkyZN4++23odfr4Xa7Q7poc8Xn82F0dDSq5wl9ntVq5Xx2nsVjSQnM4/HAYrFgZGSEMVwUFhZiz549+NnPfobNmzdDJBKhpaUFBoMBLpcr/BZAsLWjY9MjuPxlamqK1RhCQ1vpVq5cid27d2PHjh3Izs4GAIyMjODTTz/F2bNnGWHPp1XBDOHYbDZOSy0vsJvP/N7wLYpUKkVtbS3Wr1+PlJQUVFZW4sknn8T+/fuxevVqSKVS9PX1obm5mTOiblJSEoqLixlXJo/HA6fTGVVgtKFAIBDgjjvuwO7du7Ft2zamSyWTyaBUKpkAp/O1L3m9XkZgXM/k8/lgNpths9nm/V0818eSEphYLMaqVauwb98+PPXUU3j66aexa9cuFBQUgKIoeDwetLe3o6OjI2QieCZCoRAajQYFBQXMrpRerxdOp5OztQhHJBLhzjvvxCOPPIIf/OAHuPfee/HII49gw4YNSE5OZqx18yEQCGBsbAxWq3WW8/JMHA4HRkZGonYlY4UE59PY8o4QArfbPad8WuosisA8Hg9nzbqYSKVSrF+/Hv/8z/+MH/zgB1AoFMyxyclJ6PX6kPmwcBITE1FZWRmyKYPH44HL5ZpzwREKhVi9ejV+/OMf46mnnsKDDz4IhUIx5/tEYmpqCmazmXP9ms1mw8jICKsg5opUKoVarUZFRQXy8/NRUFAQknQ6HYqLiyGXy+c9vlxqLLjAxGIxMjIyoFAoIJfLIZfLkZaWFjGlp6cjJSUlJtchKsxbnQuhUIi4uLhZL3loaAhtbW2cq5bpzfRoYQYCAbhcrnkJDMGlMxUVFVi3bh0zHptvyzUTt9sNs9mMiYmJ8ENA8LktFgvMZjOrl8pcSUpKwoYNG/CTn/wEzzzzDJ599lkmPfPMMzhw4AAefvhhFBYWxvyuljoL7osoFouRkpKCwsJCrFmzBvX19Vi3bt2stH79emzatAkZGRkwmUyw2+2cBU+r1WLr1q3Q6XTzcsVxOBz44osvcOLECU7H3oqKCuzcuZPxdvd6vWhtbcWpU6cwMjISfjowY/uiO+64g9WEPRO32w29Xo+vvvoqxLN/LohEIsa7JdKiTbfbjdbWVnz22We4du3avCoHiqKQl5eHdevWobCwEEKhEGlpadDpdKioqAhJlZWVKC8vR25uLpKSkmZVbrHi8/ng8XhCPGyuR6z0pDl9T1/QSyUQCMyp0p4vC+7JgeCYxeFwwOfzgXB4KVAUhSNHjuDf//3fYTQaOQV233334Ze//CUqKirmlSlGoxG/+c1v8L//+7+sQklJScFDDz2En/70pygtLQWCXhf0M9LL/cPJy8vDE088gb1798YUwGZ8fBxHjhzBiy++iM7OzvDDMSGVSrF582Y8/fTTWL9+ffhhTExM4N1338WhQ4dgMBjCD8eEQCDAxo0b8cwzz2DLli3w+XwYHh5Gf38/pqamQt4DCXqZZGZmQqvVIikpCXa7Hd3d3RgcHGTEQhd4eq6xvLwcCQkJMJlM0Ov1MBgMGBgYgN1uR1xcHLKzs1FZWYnKysqIFQkbLpcLfX19uHLlCnp6ejA4OIiJiQn4g5t/yOVyZGdno7CwECUlJYu2T9uiCCxWRkZG8J//+Z/43e9+xzonheAixSeffBL/9E//NK8AMX6/H6dPn8YvfvELfPXVV6wma51OhyeffBJ79uxhvsdqteLtt9/GoUOHZi3WpFlogVEzXJfYEAgEqK2txbPPPov7778//DCGh4fx+uuv47e//e284zyGC2x8fBwnTpzABx98AJPJNEtgIpEId911Fx5++GGUlZWhr68Pb731Fk6dOsXkOQnuoyYUCrFu3Trs3r0bdrsdH3/8Mc6cOYPu7m6YzWa4XC5muFFUVIT6+nrcf//9qKqqYhym2eju7sbp06fxxRdfoL29HYODg7BYLHA4HAgEAhCJREhKSkJ6ejpycnJQUlKCDRs2YNOmTUw3fsEId+24kbz//vtk9erVRCQSzXK5mZm2bdtGTp06RTweT/gtYmJ4eJi88MILRKvVzro3nSiKIhs3biRHjx4lXq+XudZkMpEXXniB5OTkzLqGTnl5eeSFF14gIyMjId/Lhs1mI7///e+JTqebdS/6WQQCAREKhYSiqFnH6VRaWkr+53/+J+R5adrb28lPfvITTrcm+nvCP6eTQCAgd999N/nkk08IIYQMDQ2Rf/u3fyNpaWmzzqXT3XffTT777DPi8XhIc3Mz2b59+6xz6FRXV0cOHTpEHn/88VkubeEpKyuL7N+/nzQ3N5NAIBD+cwkhhHg8HnLx4kXy1FNPkfLycs68m5mEQiFZuXIl+dWvfkWuXbsWftvrYuHbxBihNyK/fPkya4uCoKd6TU0NqqqqYjKGRKK3txdNTU2sXUMEJ5fz8vKg1WpDXH3oSWauZ1xoCCGIj4+HTCaLaKyhmZqawvDwcEQHZKvVipGRkYiuYDRJSUlzjiosEAg434NQKGRaXyq43CUSAoEARqMR77zzDj788EPOeUkEezsnT57EJ598ArPZHH4YPp8PTU1NeOWVV/Daa69Br9dH7QXQ+P1+XLp0Ca+99hree++9Bdl0keamCIwEY2S0trZyRtGlKAolJSWorKycV9cQQeNGe3s72tvbWT03EDRU5OfnQ6VShRRoj8eDycnJGyowBJ8nJycHMpmMdWxgt9tDIhjT+Hw+xqOF7bkpikJWVhY0Gs2cAu9wGQboYzPzj+18QggGBwfR1NQ06/nZGBwcxOnTp6HX68MPQa/X4+2338aHH34Y8/3C6erqwh//+EecOnWKs6zMhdm//AZgt9tx6dIlVqMBTXx8PFauXIni4mLWWjwaZrMZBoOBiabLhkKhQEFBAVJTU0M+vxktGIJeHxqNJqrAhoaGZo1fvV4vxsbGQlzGwhEIBMjMzIRCoeBskRYL2tgxl3z1er1oaWlBW1tbSOtktVpx+vRpnDx5MmLrFiuBQABtbW1499130dTUFH54XkR+c4vMyMgI2traonYLMjIyUFVVxQSumQ89PT3Q6/VRvRlyc3NRWFg4awB9swQWFxeHzMxMZGZmznomGo/Hg9HRUVgslhAzvMfjgdlsnvX5TBISEpCVlYW0tDRWAd+KmM1mdHV1MUIihMBgMODMmTPo7e0NPz0EiUTCmpc0Xq8XDQ0NaGhoWJBW7IbnrNfrRVdXF9rb2zmXW4hEIuTn52PFihWcMeW58Pv9uHz5Mtrb21lrcgS/q6CgIKKp9mYJDMFpg+zsbM5FlXRLNbMwTE1NwWKxcG7BlJ6eDrVajZSUlHn3Dm4GPp8PIyMjjGXU6XTi66+/RnNzM2tlkpqainXr1mHXrl149NFHQza8j4TFYsHVq1cXZI+4Gy4wh8OBxsZGZtUvG4mJiaiurkZBQcG81xf19/ejtbU1akup0WhQVFQUcb9ml8sFu93OKdDFgBCCpKQkqNVqToGNj4/DZDKFjGVtNhssFgurnyJFUUhPT4dKpeIsaDcCoVCI7OxsrFmzBmvWrIFGo2E1jCCYLzNDM1iD+2mzub/FxcWhuroa//AP/4CDBw/i4MGD2L9/P2pqaljHnm63GwMDA1HLTSzccIFZLBZcuHAh6twMHbt9vvMSPp8P33zzDS5dusRZk4vFYlRWVqKkpARxcXHhh+F0OqPGtV8MAoEAIzAu75DJyUkMDQ2FuEyNj49jdHSUtVKgKAoZGRnIzs5GYmIiZ0W3mFAUhaKiIvzLv/wL3nzzTfzhD3/A008/jfLyctZKlZ4jDAQC8Hq9GBkZgdFoZP2tcrkcdXV12LBhA3JycqBWq3H33Xfj3nvvnTXenonZbIbZbGa9b6zcUIE5nU40NjbiypUrnP3bhIQErFq1CitWrJj3qt+xsTE0NDRENaQkJiZi5cqVjMd9OE6nc95+iNcDbaqnfTrZClwkgdEtGFulEBcXB5VKhaysrKhjksWEDmf34IMPoqSkBEVFRbjvvvuwdetWzgl7+j253W4MDg5GnKagSUlJgVarDdl4MTMzEyUlJZytt91uZzw/rocbKrC+vj789a9/jdp65eTkYPPmzfNuvfx+P65cuYKWlhZOqxJFUcjOzkZpaWnEMNaBQAAOh2PBnGXnAiEEYrEYaWlpUKlUEVtXBMe09FyYPxgCbmxsDGNjY6yVAr1fGj31cTNaMIqikJubiw0bNoTsmZ2VlYXa2tqQVRCRoILLj6xWK2dlHR8fj7S0tJCKWigUQiaTsVZamMMawGjcMIH5/X7o9Xo0NDRENW6sWLECNTU18zZuTExM4OLFi+ju7mYtZAhalQoLC5GXlxexALvdbtjtds7J2sWCEAKBQAC5XA6NRsM5DqNbLLfbDbfbjbGxMYyPj7MKRy6XIzc3FzKZ7LoL0PWQmJg4a2mLUChEeno6Z7eYJhAIwO12c/4Gm82GCxcu4MSJEzh16hROnTqFjz/+GKdOneKcg/UHY3uy5WGs3DCBjYyMoKWlhYmqy0ZGRsas9VhzxWQyobW1ldNzA0FPhsLCQmRnZ0fsHtIGDrau1mJCCyw1NRVqtTpqd4a2JNpsNoyOjrKuExOJREhLS4NWq4VMJrvuAnQ9RPpueqkRl6GDhgTn0rjKk9FoxKuvvsr4iu7duxf79u3Df/zHf3CWDzIjTuT1ML8SPA+6urrQ0tLCun6JJi8v77o8NzweD7q7u3HlyhVO4waCYtbpdKwbo98KAktOToZareYckNMCs9vtGBsb4xSYVCpFVlYWlEol4uPjOQvnjeB6C3A0Efj9fthsNgwMDODatWtMANlo4RYWihsiMI/HgytXruDKlSuchVUkEqGkpASlpaXz9i6w2WzQ6/WcliUE+/BKpRKFhYWs3ZGb2UWkkUqlUCgUUCgUrGMGh8OB0dFR2O12WCwWToElJiYyghUIBJyFczlzW7VgZrMZer2ec6EjgpOf9HL0+TI4OIjGxsao/mjx8fHIyclBTk4Oq5idTiempqZumsDoZR0KhQJqtZrVoup2u5kgOKOjozCbzawVGW1VS0xMvOmt162My+VizcO5cEME1tbWhkuXLnHGhqAoClVVVVi1ahXneIMLr9eL9vb2mPZaTk9PR3FxMdLT08MPMdBzYFwt4WJCCywzMxM5OTmsRh+fz4exsTH09/cz3R+2mpd2Ik5ISLhpv+tGIhaLoVAoUFpaioqKCpSVlTGpvLx8ViorK0NJSQlWrVoFlUrF2muIlUUXmMPhwFdffYXLly+HHwohKSkJ9fX1WLFiRfihmDEajWhoaIhqSAEAlUqFiooKJnJUJNxuNxwOx01rwWYaOrKzs1nHYSQYwZdevctWkYlEImRkZECpVEIqlUbNo6XAzKCzBw4cwLPPPovnnnsOBw4cwIEDB/Dcc8/NSv/6r/+K/fv3o7a29rrnCRdVYIQQtLe349tvv+W02FAUBZ1Oh5qaGibY53xobm7GhQsXOM2vNFqtFsXFxZzm75vlxTETKhiuWqlUIisrK2KNGggEYLVaYTAY0NXVxWrciY+Ph0qlYgxIy0VgdXV1eOCBB/D9738fDz74IHbs2IHt27dHTDt27MCDDz6IzZs3Iy8vL2J+z4VFFdjk5CTOnj2Ljo4OzpeZnJyMtWvXoqioaN6mebPZjObmZnR1dXF+F4KTmStWrEBWVlZE8zyN0+mEw+G4qV0puqunUCigUqlYa1Sr1Yq2tjZ0dnaytmBJSUnIzs5mupps3cilBB0eQCaTQSqVIi4ujknhf89MkuA2T9fL/EpzjBiNRpw/fz6q54Zarcbq1avn3XoFAgF0dXVBr9fPWhsVCZ1Oh5UrV7KOaRAWru1mQlcWCoUC2dnZrIaOqakp9Pb2wmg0sgqMtiDS3eLlIDASDJbK5vi82CyawGKJoovgILSoqAgrVqxgNZdHw+l0Mt2jaOMlkUiEoqIi6HQ6Vm9qBOdPHA7HTRcYDe0yxWYA8vv9mJycxOTkJGsepKamQqlUcnaLeRaWRROY2WxmPDe4asqMjAxUVFRAq9XOu3totVqh1+tDtohlIyMjA4WFhVFDgHmD4bJvVs1HQ+ddYmIiFArFvCfgKYqCQqFAZmYm67TEcoJerEpbXsMTPZfIVXZjYX4lOgaMRiOampo4PZ0R9Kiurq5mtZBFw+/3o7e3FwaDIWoQT4FAwMTCY/PeoPF4PDfVgkhDv2B6iT+boSMatEdIRkbGvCuypQIhBN3d3XjllVfw3HPPMevE6PTzn/8cr7zyChobG6/7/S9KTvv9fnR2dqKtrY3TE522HlZVVUV0to2FqakpNDY2oqurK6oxQiKRQKvVMvt+cUGb6G92CzYTOiT5fASWkpKCnJwcznm/2w3aQMVlqIqEz+eD0WjE0aNH8d577+Gdd97Bn/70J/zpT39i/v/RRx/BYDDcmgLr6enB+fPnoy65LioqwqZNm5Cfnz/nTKIZGhrC+fPnY+oeJiYmQqfTxWRMobuI15vBCwk9hxWtcoiEXC6HWq1eUpuTUywRq8IJL1uEEDidTpjNZjgcDkxNTTHj16mpKdjtdpjNZkxNTUW1SEcj+tPNg6amJpw7d46z9QKAgoICaDQaWCwWjI2NwRLcrIBO9N/0bo7h81HuYPx1g8HAuQSGRiaTQafTxVSL3ypdxJkkJydDqVTOWSQCgQBKpXLe4rxVEQgEUT3v/cHIVTPHUvT/ucaiUqkUYrE4JgFzcX1XRyAQCKCzszOm+Siz2YwzZ87grbfewptvvonDhw/j9ddfZ9Ibb7yBN954A6+++iqOHz+Ovr6+EJEZjUacO3cuakuJ4MtQq9XIz8/n9N6goR19o1USNxJ6olilUs3pxSckJECtVkc17NxuiMViyOVy1qkLBD2JrFZryPCBjrrF1f0XiUSIi4ubUz5H4vqujsDk5CQswTjg0dDr9Xj99dfxm9/8Bi+++CJeeuklHDp0iEkvvfQSXnrpJfz617/GG2+8gdbW1pBM6ezsxMWLF2Oa+0pOTkZ5eTmys7OjZhoh5JZswSQSCeP4y1X7hpOYmIicnJyoq4RvF0jQy10qlXK6kCG4uuLq1ashnkSDg4O4ePEiZ68nPj4eSUlJnK1jLHCXtHngDW4RE631QnD+ymw2Y2hoiEnDw8MhaWRkBDabDf39/RgfH2fua7PZYDAY0N3dPavrGInU1FSsXLkyplqcEMKsBbuVBEZ71mdnZ8+pq0cHz+GKc3G7QYKbTSiVSuTm5rLOaU5MTODs2bN499138c0336CxsRHvvfcePvnkE06ByWQyzlgosbLgAqMoikkLCe26Qt+3r68PbW1tnDE3aCiKgkajQUlJCWdtR0MLbCFiMiw0tLGCbcI5HIFAgPT0dCiVyjm1erc6JLgtVnp6OlatWhUS12Mmfr8f7e3teP311/H888/j+eefx+HDh9HR0cH6bunpHLVaHbW3E43ru/oGQguL/sGdnZ0wGAxRl6UgWIOXlZVBrVbH1OT7/X44g9GkbjXo1iiaHyWNVCqFUqmMybBzOyKVSlFTU4NVq1axisHn86GzsxMnT57E8ePHI24ZNZP09HSUlZVBq9WGH5ozkZ/oFoUuUC6XC3q9Hl1dXTHNtCuVSlRUVEQMLBoJEgxueSsKLD4+HhqNJuYWSSKRQKVSxdRy307MfO/FxcWor69HXl5eyDnzQSKRYO3ataivr5+ztTYSt5XAhEIhfD4fDAYDWlpaYjJuIOgtotPpYrIeIljj2e12TivTzUIsFkOlUkGhULCOO2YSF9wlMprnyu0ILbK0tDRs3LgRW7Zsua6KRCKR4I477sCuXbuwdu3a8MPz4rYTmNvtxrlz59Da2srah55JfHw8cnNzOUMDhEM7+t5KJvqZZGRkQKVSxeQcnZKSAqVSGXPlcjtCURTKy8uxa9cu/N3f/V3MPZWZUBSF6upq7Nu3D1u2bImp8oqFBRcYCS4PiKXwzwXas6Krq4vZGjQWkpKSmH2/YsUfjEQUbUcWGpfLNSdrIwmGG+PqgnLFhEhMTIRSqYxJYHK5HJmZmRHniggh8Pl8rOPYQDDuIG25pd8t2/mEkJDzA4EAPB5PRIsyPRUS6Rj9vZHwBTdJD79OKpVizZo1+Md//Ef8+Mc/Rk1NTcyW1vz8fOzZswdPPfUUtm/fvqCtvfDgwYMHwz+8HuguXG9vLxISEpCcnIyUlJR5p+TkZCQmJqK8vByrV6+Gy+XCxYsXYbPZZp0bfl1KSgpqamrwve99D5WVlTGbXD0eDzo6OtDX1we/38/6G5KTk5GcnIyCggLU1dWhsrIyYkEOx+v1YmBggFleM/P+9D3pccWKFSsi1qYzN31ISkqa9Wz04sp169Zh48aNUKvVs4wiLpcL3d3dMBqNEIlEs55DLpejsrIS69evR05ODtxuN3p6epgN62UyWcj5MpkMd9xxB+rr66FWqzE5OYnLly9jZGQEiYmJzP2Tk5OZaZONGzdCFbbpocViQWtrK8bHx2c9U1paGqqrq1FXVzfrOnoao6qqillYSqfExEQkJCQgJSUF6enp0Gg0KC0tRX19PR566CHs3r0b9fX1Mb2/ubDgm6D7/X5cuHAhZH+l8Bc7F+haU6fT4c4774TL5UJzczMGBwc5pwMCwYAxpaWlqK2tZQ0uGgnaBaupqQmjo6Os30NnnUKhQHV1NasYwvEGt3CauRiVvj8JTqJqNBrU1taiuLh4luUzEAhgcHAQX3/9NTo7O+H1emdZ0OiKgQ4kFKlWdjgcaGlpwbfffsvEq6SfIxAIQCwWo6CgAHfddRfUajVcLhdaW1vx7bffwmw2hzwXIQRCoRDFxcVYs2YNVCoVrFYrLly4AL1ez7TwFEUhENyIvKioCBs2bJjVpTOZTDh79iwTmZn+bSQ491VeXo61a9dyWkYJIRgdHUVXVxf6+vqYuJEIDhvSgxugFxQUxGwwmg8LLjAEWwCXy7Vg3UQSnLWXSqXw+/1wRwmXTENRFLM0PJJA2KBF7Xa7WbtpNFRwH2KpVAqRSBTz9/h8Ptau5cx7sr14uhvldrsZoYcjDEbJFYvFEZ+L7qax5acguB+zVCqFMLj3Mle+UMH4IbSLEdczUhQFsViM+Pj4iJWDy+WKaGSiKArS4FL/SL8pHPo3ejwe5jcKhUKIxWKIxeKYezXzZVEExsPDM82CGzl4eHj+D15gPDyLCC8wHp5FhBcYD88iwguMh2cR4QXGw7OI8ALj4VlEeIHx8CwivMB4eBYRXmA8PIsILzAenkXk/wOF5q0lnuVL4AAAAABJRU5ErkJggg==';
+    60→
+    61→
+    62→interface PowerPointOptions {
+    63→  inspection: InspectionData;
+    64→  photos: PhotoData[];
+    65→  additionalParts: AdditionalPart[];
+    66→  conclusion: string;
+    67→  language?: Language;
+    68→  reportId?: string;
+    69→  translatedData?: {
+    70→    inspection: InspectionData;
+    71→    photos: PhotoData[];
+    72→    conclusion: string;
+    73→  };
+    74→}
+    75→
+    76→interface HomePowerPointOptions {
+    77→  inspection: InspectionData;
+    78→  categories: PhotoCategory[];
+    79→  conclusion: string;
+    80→  language?: Language;
+    81→  reportId?: string;
+    82→  translatedData?: {
+    83→    inspection: InspectionData;
+    84→    categories: PhotoCategory[];
+    85→    conclusion: string;
+    86→  };
+    87→}
+    88→
+    89→export async function generatePowerPoint(options: PowerPointOptions): Promise<void> {
+    90→  const { inspection, photos, additionalParts, conclusion, language = 'pt', reportId, translatedData } = options;
+    91→  const isTranslated = language !== 'pt';
+    92→  
+    93→  // Use translated data if available, otherwise use original
+    94→  const finalInspection = translatedData?.inspection || inspection;
+    95→  const finalPhotos = translatedData?.photos || photos;
+    96→  const finalConclusion = translatedData?.conclusion || conclusion;
+    97→  
+    98→  const pptx = new pptxgen();
+    99→  
+   100→  // Set presentation properties
+   101→  pptx.author = 'Z-Services AI';
+   102→  pptx.title = `Relatório Técnico - ${finalInspection.tag || 'Máquina'}`;
+   103→  pptx.subject = finalInspection.descricao || 'Inspeção Técnica';
+   104→  
+   105→  // Generate slides
+   106→  generateCoverSlide(pptx, finalInspection, language, reportId);
+   107→  
+   108→  // Slide de Identificação da Máquina (sempre gerado)
+   109→  await generateMachineIdentificationSlide(pptx, finalInspection, language);
+   110→  
+   111→  await generatePhotoSlides(pptx, finalPhotos, language);
+   112→  generatePartsTableSlides(pptx, finalPhotos, additionalParts, language);
+   113→  
+   114→  if (finalConclusion.trim()) {
+   115→    generateConclusionSlide(pptx, finalConclusion, language);
+   116→  }
+   117→  
+   118→  generateFinalSlide(pptx, language, reportId);
+   119→  
+   120→  // Save the file
+   121→  const fileName = `Relatorio_${sanitizeForFilename(finalInspection.descricao || finalInspection.tag)}_${reportId || ''}_${formatDateForFileName(finalInspection.data)}.pptx`.replace(/__+/g, '_');
+   122→  const blob = await pptx.write({ outputType: 'blob' }) as Blob;
+   123→  saveAs(blob, fileName);
+   124→}
+   125→
+   126→// ============================================
+   127→// HOME POWERPOINT - Com Categorias
+   128→// ============================================
+   129→export async function generateHomePowerPoint(options: HomePowerPointOptions): Promise<void> {
+   130→  const { inspection, categories, conclusion, language = 'pt', reportId, translatedData } = options;
+   131→  const isTranslated = language !== 'pt';
+   132→  
+   133→  // Use translated data if available, otherwise use original
+   134→  const finalInspection = translatedData?.inspection || inspection;
+   135→  const finalCategories = translatedData?.categories || categories;
+   136→  const finalConclusion = translatedData?.conclusion || conclusion;
+   137→  
+   138→  const pptx = new pptxgen();
+   139→  
+   140→  // Set presentation properties
+   141→  pptx.author = 'Z-Services AI';
+   142→  pptx.title = `Relatório Técnico - ${finalInspection.tag || 'Máquina'}`;
+   143→  pptx.subject = finalInspection.descricao || 'Inspeção Técnica';
+   144→  
+   145→  // Generate slides
+   146→  generateCoverSlide(pptx, finalInspection, language, reportId);
+   147→  
+   148→  // Slide de Identificação da Máquina (sempre gerado)
+   149→  await generateMachineIdentificationSlide(pptx, finalInspection, language);
+   150→  
+   151→  // Generate category slides
+   152→  for (const [index, category] of finalCategories.entries()) {
+   153→    const photosWithImages = category.photos.filter(p => p.imageData);
+   154→    if (photosWithImages.length > 0) {
+   155→      await generateCategorySlides(pptx, category, index + 1, language);
+   156→    }
+   157→  }
+   158→
+   159→  // Collect all parts from all categories for the parts table
+   160→  const allPhotos: PhotoData[] = [];
+   161→  const allAdditionalParts: AdditionalPart[] = [];
+   162→  finalCategories.forEach(category => {
+   163→    allPhotos.push(...category.photos);
+   164→    allAdditionalParts.push(...category.additionalParts);
+   165→  });
+   166→  
+   167→  generatePartsTableSlides(pptx, allPhotos, allAdditionalParts, language);
+   168→  
+   169→  if (finalConclusion.trim()) {
+   170→    generateConclusionSlide(pptx, finalConclusion, language);
+   171→  }
+   172→  
+   173→  generateFinalSlide(pptx, language, reportId);
+   174→  
+   175→  // Save the file
+   176→  const fileName = `Relatorio_Home_${sanitizeForFilename(finalInspection.descricao || finalInspection.tag)}_${reportId || ''}_${formatDateForFileName(finalInspection.data)}.pptx`.replace(/__+/g, '_');
+   177→  const blob = await pptx.write({ outputType: 'blob' }) as Blob;
+   178→  saveAs(blob, fileName);
+   179→}
+   180→
+   181→// Helper function to get translated category title and description
+   182→function getCategoryTranslation(categoryId: string, language: Language): { title: string; description: string } {
+   183→  const titleKey = `category.${categoryId}`;
+   184→  const descKey = `category.${categoryId}Desc`;
+   185→  
+   186→  return {
+   187→    title: t(titleKey, language, { defaultValue: categoryId }),
+   188→    description: t(descKey, language, { defaultValue: '' }),
+   189→  };
+   190→}
+   191→
+   192→/**
+   193→ * Detect photo orientation and return appropriate PPT dimensions.
+   194→ */
+   195→async function getPhotoDimensions(photo: PhotoData): Promise<{ w: number; h: number; isPortrait: boolean }> {
+   196→  const imgData = photo.editedImageData || photo.imageData;
+   197→  if (!imgData) return { w: PHOTO_LANDSCAPE_W, h: PHOTO_LANDSCAPE_H, isPortrait: false };
+   198→  try {
+   199→    const info = await getImageInfo(imgData);
+   200→    return info.isPortrait
+   201→      ? { w: PHOTO_PORTRAIT_W, h: PHOTO_PORTRAIT_H, isPortrait: true }
+   202→      : { w: PHOTO_LANDSCAPE_W, h: PHOTO_LANDSCAPE_H, isPortrait: false };
+   203→  } catch {
+   204→    return { w: PHOTO_LANDSCAPE_W, h: PHOTO_LANDSCAPE_H, isPortrait: false };
+   205→  }
+   206→}
+   207→
+   208→/**
+   209→ * Calculate x,y positions for 1 or 2 photos on a slide,
+   210→ * centering them horizontally.
+   211→ */
+   212→function layoutPhotos(
+   213→  dims1: { w: number; h: number } | null,
+   214→  dims2: { w: number; h: number } | null,
+   215→  y: number,
+   216→  gap: number
+   217→): Array<{ photo: PhotoData; x: number; y: number; w: number; h: number } | null> {
+   218→  const result: Array<{ photo: PhotoData; x: number; y: number; w: number; h: number } | null> = [null, null];
+   219→  
+   220→  if (!dims1 && !dims2) return result;
+   221→  
+   222→  if (dims1 && !dims2) {
+   223→    // Single photo: center it
+   224→    result[0] = { photo: null!, x: (10 - dims1.w) / 2, y, w: dims1.w, h: dims1.h };
+   225→    return result;
+   226→  }
+   227→  
+   228→  if (dims1 && dims2) {
+   229→    // Two photos: center them together
+   230→    const totalW = dims1.w + gap + dims2.w;
+   231→    const startX = (10 - totalW) / 2;
+   232→    result[0] = { photo: null!, x: startX, y, w: dims1.w, h: dims1.h };
+   233→    result[1] = { photo: null!, x: startX + dims1.w + gap, y, w: dims2.w, h: dims2.h };
+   234→    return result;
+   235→  }
+   236→  
+   237→  // Only dims2 (shouldn't happen)
+   238→  result[1] = { photo: null!, x: (10 - dims2.w) / 2, y, w: dims2.w, h: dims2.h };
+   239→  return result;
+   240→}
+   241→
+   242→async function generateCategorySlides(
+   243→  pptx: pptxgen, 
+   244→  category: PhotoCategory, 
+   245→  categoryNumber: number,
+   246→  language: Language
+   247→) {
+   248→  const isTranslated = language !== 'pt';
+   249→  const photosWithImages = category.photos.filter(p => p.imageData);
+   250→  
+   251→  // Get translated title
+   252→  const { title: translatedTitle } = getCategoryTranslation(category.id, language);
+   253→  
+   254→  let photoRef = 0;
+   255→  let i = 0;
+   256→  
+   257→  while (i < photosWithImages.length) {
+   258→    const photo = photosWithImages[i];
+   259→    const isDual = !!(photo.secondaryImageData && photo.imageData);
+   260→    
+   261→    if (isDual) {
+   262→      // Dual photo gets its own full-width slide
+   263→      photoRef++;
+   264→      const slide = pptx.addSlide();
+   265→      addCategoryHeader(slide, `${categoryNumber}. ${translatedTitle.toUpperCase()}`);
+   266→      await addPhotoToSlide(slide, photo, SLIDE_MARGIN, 1.2, DUAL_PHOTO_W, DUAL_PHOTO_H, language, String(photoRef));
+   267→      addStandardFooter(slide);
+   268→      i++;
+   269→    } else {
+   270→      // Single photo - try to pair with next single photo
+   271→      const nextPhoto = (i + 1 < photosWithImages.length && !photosWithImages[i + 1].secondaryImageData)
+   272→        ? photosWithImages[i + 1]
+   273→        : null;
+   274→      
+   275→      const slide = pptx.addSlide();
+   276→      addCategoryHeader(slide, `${categoryNumber}. ${translatedTitle.toUpperCase()}`);
+   277→      
+   278→      // Photo 1
+   279→      photoRef++;
+   280→      const dims1 = await getPhotoDimensions(photo);
+   281→      const pos1 = { x: (10 - dims1.w) / 2, y: 1.2, w: dims1.w, h: dims1.h };
+   282→      await addPhotoToSlide(slide, photo, pos1.x, pos1.y, pos1.w, pos1.h, language, String(photoRef));
+   283→      
+   284→      // Photo 2 (if available)
+   285→      if (nextPhoto) {
+   286→        photoRef++;
+   287→        const dims2 = await getPhotoDimensions(nextPhoto);
+   288→        const positions = layoutPhotos(dims1, dims2, 1.2, 0.2);
+   289→        await addPhotoToSlide(slide, nextPhoto, positions[1].x, positions[1].y, positions[1].w, positions[1].h, language, String(photoRef));
+   290→        i += 2;
+   291→      } else {
+   292→        i++;
+   293→      }
+   294→      
+   295→      addStandardFooter(slide);
+   296→    }
+   297→  }
+   298→}
+   299→
+   300→function generateCoverSlide(pptx: pptxgen, inspection: InspectionData, language: Language, reportId?: string) {
+   301→  const isTranslated = language !== 'pt';
+   302→  const slide = pptx.addSlide();
+   303→  
+   304→  // Header
+   305→  addStandardHeader(slide, isTranslated ? 'INSPECTION' : 'INSPEÇÃO');
+   306→  
+   307→  // Title
+   308→  slide.addText(isTranslated ? 'Technical Report' : 'Relatório Técnico', {
+   309→    x: 0.3,
+   310→    y: 1.05,
+   311→    w: 6,
+   312→    h: 0.6,
+   313→    fontSize: 18,
+   314→    bold: true,
+   315→    color: '000000',
+   316→    fontFace: 'Arial',
+   317→  });
+   318→  
+   319→  // Info card background
+   320→  slide.addShape(pptx.ShapeType.roundRect, {
+   321→    x: 0.3,
+   322→    y: 1.85,
+   323→    w: 9.4,
+   324→    h: 3.8,
+   325→    fill: { color: 'F8F9FA' },
+   326→    line: { color: 'E0E0E0', width: 1 },
+   327→  });
+   328→  
+   329→  // Left border
+   330→  slide.addShape(pptx.ShapeType.rect, {
+   331→    x: 0.3,
+   332→    y: 1.85,
+   333→    w: 0.08,
+   334→    h: 3.8,
+   335→    fill: { color: 'FF6600' },
+   336→  });
+   337→  
+   338→  // Card title
+   339→  slide.addText(isTranslated ? 'Execution Information' : 'Informações da Execução', {
+   340→    x: 0.5,
+   341→    y: 1.93,
+   342→    w: 8,
+   343→    h: 0.35,
+   344→    fontSize: 9,
+   345→    bold: true,
+   346→    color: '000000',
+   347→    fontFace: 'Arial',
+   348→  });
+   349→  
+   350→  // Machine info
+   351→  let infoY = 2.3;
+   352→  const machineInfo = [
+   353→    { label: isTranslated ? 'TAG:' : 'TAG:', value: inspection.tag || '-' },
+   354→    { label: isTranslated ? 'Model:' : 'Modelo:', value: inspection.modelo || '-' },
+   355→    { label: 'SN:', value: inspection.sn || '-' },
+   356→    { label: isTranslated ? 'Delivery:' : 'Entrega:', value: inspection.entrega || '-' },
+   357→    { label: isTranslated ? 'Customer:' : 'Cliente:', value: inspection.cliente || '-' },
+   358→    { label: isTranslated ? 'Description:' : 'Descrição:', value: inspection.descricao || '-' },
+   359→    { label: 'MACHINE DOWN?:', value: inspection.machineDown || '-' },
+   360→    { label: isTranslated ? 'Report ID:' : 'ID do Relatório:', value: reportId || '-' },
+   361→  ];
+   362→  
+   363→  machineInfo.forEach(info => {
+   364→    slide.addText(info.label, {
+   365→      x: 0.5,
+   366→      y: infoY,
+   367→      w: 1.5,
+   368→      h: 0.22,
+   369→      fontSize: 9,
+   370→      bold: true,
+   371→      color: '000000',
+   372→      fontFace: 'Arial',
+   373→    });
+   374→    
+   375→    slide.addText(info.value, {
+   376→      x: 2,
+   377→      y: infoY,
+   378→      w: 7,
+   379→      h: 0.22,
+   380→      fontSize: 9,
+   381→      color: '000000',
+   382→      fontFace: 'Arial',
+   383→    });
+   384→    
+   385→    infoY += 0.22;
+   386→  });
+   387→  
+   388→  // Separator
+   389→  slide.addShape(pptx.ShapeType.line, {
+   390→    x: 0.5,
+   391→    y: infoY + 0.1,
+   392→    w: 8.5,
+   393→    h: 0,
+   394→    line: { color: 'E0E0E0', width: 1, dashType: 'dash' },
+   395→  });
+   396→  
+   397→  // Report data section
+   398→  infoY += 0.25;
+   399→  slide.addText(isTranslated ? 'REPORT DATA' : 'DADOS DO RELATÓRIO', {
+   400→    x: 0.5,
+   401→    y: infoY,
+   402→    w: 8,
+   403→    h: 0.22,
+   404→    fontSize: 8,
+   405→    bold: true,
+   406→    color: 'FF6600',
+   407→    fontFace: 'Arial',
+   408→  });
+   409→  
+   410→  infoY += 0.22;
+   411→  
+   412→  const reportInfo = [
+   413→    { 
+   414→      label: isTranslated ? 'Execution Date:' : 'Data da Execução:', 
+   415→      value: formatDateForDisplay(inspection.data) || '-' 
+   416→    },
+   417→  ];
+   418→  
+   419→  // Add Data Final if provided
+   420→  if (inspection.dataFinal) {
+   421→    reportInfo.push({
+   422→      label: isTranslated ? 'End Date:' : 'Data Final:',
+   423→      value: formatDateForDisplay(inspection.dataFinal),
+   424→    });
+   425→  }
+   426→  
+   427→  // Add OS de Execução if provided
+   428→  if (inspection.osExecucao) {
+   429→    reportInfo.push({
+   430→      label: isTranslated ? 'Work Order:' : 'OS de Execução:',
+   431→      value: inspection.osExecucao,
+   432→    });
+   433→  }
+   434→  
+   435→  reportInfo.push(
+   436→    { 
+   437→      label: isTranslated ? 'Names of Performers:' : 'Nomes dos Executantes:', 
+   438→      value: inspection.inspetor || '-' 
+   439→    },
+   440→    { 
+   441→      label: isTranslated ? 'Hour Meter:' : 'Horímetro:', 
+   442→      value: inspection.horimetro || '-' 
+   443→    }
+   444→  );
+   445→  
+   446→  reportInfo.forEach(info => {
+   447→    slide.addText(info.label, {
+   448→      x: 0.5,
+   449→      y: infoY,
+   450→      w: 1.5,
+   451→      h: 0.22,
+   452→      fontSize: 9,
+   453→      bold: true,
+   454→      color: '000000',
+   455→      fontFace: 'Arial',
+   456→    });
+   457→    
+   458→    slide.addText(info.value, {
+   459→      x: 2,
+   460→      y: infoY,
+   461→      w: 7,
+   462→      h: 0.22,
+   463→      fontSize: 9,
+   464→      color: '000000',
+   465→      fontFace: 'Arial',
+   466→    });
+   467→    
+   468→    infoY += 0.22;
+   469→  });
+   470→  
+   471→  // Footer
+   472→  addStandardFooter(slide);
+   473→}
+   474→
+   475→async function generateMachineIdentificationSlide(pptx: pptxgen, inspection: InspectionData, language: Language) {
+   476→  const isTranslated = language !== 'pt';
+   477→  const slide = pptx.addSlide();
+   478→  addStandardHeader(slide, isTranslated ? 'MACHINE IDENTIFICATION' : 'IDENTIFICAÇÃO DA MÁQUINA');
+   479→  
+   480→  // Title
+   481→  slide.addText(isTranslated ? 'Machine Identification' : 'Identificação da Máquina', {
+   482→    x: 0.3,
+   483→    y: 1.1,
+   484→    w: 9.4,
+   485→    h: 0.4,
+   486→    fontSize: 16,
+   487→    bold: true,
+   488→    color: '000000',
+   489→    fontFace: 'Arial',
+   490→    align: 'center',
+   491→  });
+   492→  
+   493→  // Photo positions (4 columns) - centered on slide
+   494→  const photoWidth = 2.1;
+   495→  const photoHeight = 2.1;
+   496→  const gap = 0.3;
+   497→  const totalWidth = (photoWidth * 4) + (gap * 3);
+   498→  const startX = (10 - totalWidth) / 2; // Center the photo group
+   499→  const photoY = 1.7;
+   500→  
+   501→  // Photo 1: Equipamento
+   502→  const photo1X = startX;
+   503→  slide.addShape(pptx.ShapeType.rect, {
+   504→    x: photo1X,
+   505→    y: photoY,
+   506→    w: photoWidth,
+   507→    h: photoHeight,
+   508→    fill: { color: 'F5F5F5' },
+   509→    line: { color: 'CCCCCC', width: 2, dashType: 'dash' },
+   510→  });
+   511→  
+   512→  if (inspection.machinePhoto) {
+   513→    const processed = await maybeCoverCropImage(inspection.machinePhoto, { targetW: photoWidth, targetH: photoHeight });
+   514→    slide.addImage({
+   515→      data: processed,
+   516→      x: photo1X,
+   517→      y: photoY,
+   518→      w: photoWidth,
+   519→      h: photoHeight,
+   520→    });
+   521→  } else {
+   522→    // Placeholder with camera icon
+   523→    slide.addText('📷', {
+   524→      x: photo1X,
+   525→      y: photoY + photoHeight / 2 - 0.4,
+   526→      w: photoWidth,
+   527→      h: 0.5,
+   528→      fontSize: 24,
+   529→      color: 'CCCCCC',
+   530→      fontFace: 'Arial',
+   531→      align: 'center',
+   532→    });
+   533→    slide.addText(isTranslated ? 'Equipment Photo' : 'Foto do Equipamento', {
+   534→      x: photo1X,
+   535→      y: photoY + photoHeight / 2 + 0.1,
+   536→      w: photoWidth,
+   537→      h: 0.35,
+   538→      fontSize: 8,
+   539→      color: '999999',
+   540→      fontFace: 'Arial',
+   541→      align: 'center',
+   542→      italic: true,
+   543→    });
+   544→  }
+   545→  
+   546→  // Label 1: TAG
+   547→  slide.addShape(pptx.ShapeType.rect, {
+   548→    x: photo1X,
+   549→    y: photoY + photoHeight,
+   550→    w: photoWidth,
+   551→    h: 0.4,
+   552→    fill: { color: 'FF6600' },
+   553→  });
+   554→  slide.addText(inspection.tag || (isTranslated ? 'Equipment TAG' : 'TAG do Equipamento'), {
+   555→    x: photo1X,
+   556→    y: photoY + photoHeight + 0.03,
+   557→    w: photoWidth,
+   558→    h: 0.35,
+   559→    fontSize: 9,
+   560→    bold: true,
+   561→    color: 'FFFFFF',
+   562→    fontFace: 'Arial',
+   563→    align: 'center',
+   564→  });
+   565→  
+   566→  // Photo 2: Horímetro
+   567→  const photo2X = startX + photoWidth + gap;
+   568→  slide.addShape(pptx.ShapeType.rect, {
+   569→    x: photo2X,
+   570→    y: photoY,
+   571→    w: photoWidth,
+   572→    h: photoHeight,
+   573→    fill: { color: 'F5F5F5' },
+   574→    line: { color: 'CCCCCC', width: 2, dashType: 'dash' },
+   575→  });
+   576→  
+   577→  if (inspection.horimetroPhoto) {
+   578→    const processed = await maybeCoverCropImage(inspection.horimetroPhoto, { targetW: photoWidth, targetH: photoHeight });
+   579→    slide.addImage({
+   580→      data: processed,
+   581→      x: photo2X,
+   582→      y: photoY,
+   583→      w: photoWidth,
+   584→      h: photoHeight,
+   585→    });
+   586→  } else {
+   587→    // Placeholder with camera icon
+   588→    slide.addText('📷', {
+   589→      x: photo2X,
+   590→      y: photoY + photoHeight / 2 - 0.4,
+   591→      w: photoWidth,
+   592→      h: 0.5,
+   593→      fontSize: 24,
+   594→      color: 'CCCCCC',
+   595→      fontFace: 'Arial',
+   596→      align: 'center',
+   597→    });
+   598→    slide.addText(isTranslated ? 'Hour Meter Photo' : 'Foto do Horímetro', {
+   599→      x: photo2X,
+   600→      y: photoY + photoHeight / 2 + 0.1,
+   601→      w: photoWidth,
+   602→      h: 0.35,
+   603→      fontSize: 8,
+   604→      color: '999999',
+   605→      fontFace: 'Arial',
+   606→      align: 'center',
+   607→      italic: true,
+   608→    });
+   609→  }
+   610→  
+   611→  // Label 2: Horímetro
+   612→  slide.addShape(pptx.ShapeType.rect, {
+   613→    x: photo2X,
+   614→    y: photoY + photoHeight,
+   615→    w: photoWidth,
+   616→    h: 0.4,
+   617→    fill: { color: 'FF6600' },
+   618→  });
+   619→  slide.addText(`${isTranslated ? 'Hour Meter' : 'Horímetro'}: ${inspection.horimetro || '-'}`, {
+   620→    x: photo2X,
+   621→    y: photoY + photoHeight + 0.03,
+   622→    w: photoWidth,
+   623→    h: 0.35,
+   624→    fontSize: 9,
+   625→    bold: true,
+   626→    color: 'FFFFFF',
+   627→    fontFace: 'Arial',
+   628→    align: 'center',
+   629→  });
+   630→  
+   631→  // Photo 3: Serial Number
+   632→  const photo3X = startX + (photoWidth + gap) * 2;
+   633→  slide.addShape(pptx.ShapeType.rect, {
+   634→    x: photo3X,
+   635→    y: photoY,
+   636→    w: photoWidth,
+   637→    h: photoHeight,
+   638→    fill: { color: inspection.serialPhoto ? 'F5F5F5' : '000000' },
+   639→    line: { color: 'CCCCCC', width: 2, dashType: inspection.serialPhoto ? 'dash' : 'solid' },
+   640→  });
+   641→  
+   642→  if (inspection.serialPhoto) {
+   643→    const processed = await maybeCoverCropImage(inspection.serialPhoto, { targetW: photoWidth, targetH: photoHeight });
+   644→    slide.addImage({
+   645→      data: processed,
+   646→      x: photo3X,
+   647→      y: photoY,
+   648→      w: photoWidth,
+   649→      h: photoHeight,
+   650→    });
+   651→  } else {
+   652→    // Black background with white serial number text
+   653→    const serialNumber = inspection.sn || '-';
+   654→    slide.addText(serialNumber, {
+   655→      x: photo3X,
+   656→      y: photoY + photoHeight / 2 - 0.25,
+   657→      w: photoWidth,
+   658→      h: 0.5,
+   659→      fontSize: 18,
+   660→      bold: true,
+   661→      color: 'FFFFFF',
+   662→      fontFace: 'Arial',
+   663→      align: 'center',
+   664→    });
+   665→  }
+   666→  
+   667→  // Label 3: Serial Number
+   668→  slide.addShape(pptx.ShapeType.rect, {
+   669→    x: photo3X,
+   670→    y: photoY + photoHeight,
+   671→    w: photoWidth,
+   672→    h: 0.4,
+   673→    fill: { color: 'FF6600' },
+   674→  });
+   675→  slide.addText(`${isTranslated ? 'SN' : 'NS'}: ${inspection.sn || '-'}`, {
+   676→    x: photo3X,
+   677→    y: photoY + photoHeight + 0.03,
+   678→    w: photoWidth,
+   679→    h: 0.35,
+   680→    fontSize: 9,
+   681→    bold: true,
+   682→    color: 'FFFFFF',
+   683→    fontFace: 'Arial',
+   684→    align: 'center',
+   685→  });
+   686→  
+   687→  // Photo 4: Local
+   688→  const photo4X = startX + (photoWidth + gap) * 3;
+   689→  slide.addShape(pptx.ShapeType.rect, {
+   690→    x: photo4X,
+   691→    y: photoY,
+   692→    w: photoWidth,
+   693→    h: photoHeight,
+   694→    fill: { color: 'F5F5F5' },
+   695→    line: { color: 'CCCCCC', width: 2, dashType: 'dash' },
+   696→  });
+   697→  
+   698→  if (inspection.localPhoto) {
+   699→    const processed = await maybeCoverCropImage(inspection.localPhoto, { targetW: photoWidth, targetH: photoHeight });
+   700→    slide.addImage({
+   701→      data: processed,
+   702→      x: photo4X,
+   703→      y: photoY,
+   704→      w: photoWidth,
+   705→      h: photoHeight,
+   706→    });
+   707→  } else {
+   708→    // Placeholder with camera icon
+   709→    slide.addText('📷', {
+   710→      x: photo4X,
+   711→      y: photoY + photoHeight / 2 - 0.4,
+   712→      w: photoWidth,
+   713→      h: 0.5,
+   714→      fontSize: 24,
+   715→      color: 'CCCCCC',
+   716→      fontFace: 'Arial',
+   717→      align: 'center',
+   718→    });
+   719→    slide.addText(isTranslated ? 'Location Photo' : 'Foto do Local', {
+   720→      x: photo4X,
+   721→      y: photoY + photoHeight / 2 + 0.1,
+   722→      w: photoWidth,
+   723→      h: 0.35,
+   724→      fontSize: 8,
+   725→      color: '999999',
+   726→      fontFace: 'Arial',
+   727→      align: 'center',
+   728→      italic: true,
+   729→    });
+   730→  }
+   731→  
+   732→  // Label 4: Local
+   733→  slide.addShape(pptx.ShapeType.rect, {
+   734→    x: photo4X,
+   735→    y: photoY + photoHeight,
+   736→    w: photoWidth,
+   737→    h: 0.4,
+   738→    fill: { color: 'FF6600' },
+   739→  });
+   740→  slide.addText(isTranslated ? 'Location' : 'Local', {
+   741→    x: photo4X,
+   742→    y: photoY + photoHeight + 0.03,
+   743→    w: photoWidth,
+   744→    h: 0.35,
+   745→    fontSize: 9,
+   746→    bold: true,
+   747→    color: 'FFFFFF',
+   748→    fontFace: 'Arial',
+   749→    align: 'center',
+   750→  });
+   751→  
+   752→  addStandardFooter(slide);
+   753→}
+   754→
+   755→async function generatePhotoSlides(pptx: pptxgen, photos: PhotoData[], language: Language) {
+   756→  const isTranslated = language !== 'pt';
+   757→  const photosWithImages = photos.filter(p => p.imageData);
+   758→  
+   759→  let photoRef = 0;
+   760→  let i = 0;
+   761→  
+   762→  while (i < photosWithImages.length) {
+   763→    const photo = photosWithImages[i];
+   764→    const isDual = !!(photo.secondaryImageData && photo.imageData);
+   765→    
+   766→    if (isDual) {
+   767→      // Dual photo gets its own full-width slide
+   768→      photoRef++;
+   769→      const slide = pptx.addSlide();
+   770→      addStandardHeader(slide, isTranslated ? 'PHOTOS' : 'FOTOS');
+   771→      await addPhotoToSlide(slide, photo, SLIDE_MARGIN, 1.2, DUAL_PHOTO_W, DUAL_PHOTO_H, language, String(photoRef));
+   772→      addStandardFooter(slide);
+   773→      i++;
+   774→    } else {
+   775→      // Single photo - try to pair with next single photo
+   776→      const nextPhoto = (i + 1 < photosWithImages.length && !photosWithImages[i + 1].secondaryImageData)
+   777→        ? photosWithImages[i + 1]
+   778→        : null;
+   779→      
+   780→      const slide = pptx.addSlide();
+   781→      addStandardHeader(slide, isTranslated ? 'PHOTOS' : 'FOTOS');
+   782→      
+   783→      // Photo 1
+   784→      photoRef++;
+   785→      const dims1 = await getPhotoDimensions(photo);
+   786→      const pos1 = { x: (10 - dims1.w) / 2, y: 1.2, w: dims1.w, h: dims1.h };
+   787→      await addPhotoToSlide(slide, photo, pos1.x, pos1.y, pos1.w, pos1.h, language, String(photoRef));
+   788→      
+   789→      // Photo 2 (if available)
+   790→      if (nextPhoto) {
+   791→        photoRef++;
+   792→        const dims2 = await getPhotoDimensions(nextPhoto);
+   793→        const positions = layoutPhotos(dims1, dims2, 1.2, 0.2);
+   794→        await addPhotoToSlide(slide, nextPhoto, positions[1].x, positions[1].y, positions[1].w, positions[1].h, language, String(photoRef));
+   795→        i += 2;
+   796→      } else {
+   797→        i++;
+   798→      }
+   799→      
+   800→      addStandardFooter(slide);
+   801→    }
+   802→  }
+   803→}
+   804→
+   805→async function addPhotoToSlide(
+   806→  slide: pptxgen.Slide, 
+   807→  photo: PhotoData, 
+   808→  x: number, 
+   809→  y: number, 
+   810→  w: number, 
+   811→  h: number,
+   812→  language: Language,
+   813→  photoRef: string
+   814→) {
+   815→  const isTranslated = language !== 'pt';
+   816→  
+   817→  // Check if we have a secondary photo (two photos side by side)
+   818→  const hasSecondaryPhoto = photo.secondaryImageData && photo.imageData;
+   819→  
+   820→  // Calculate photo widths
+   821→  const photoWidth = hasSecondaryPhoto ? (w - 0.1) / 2 : w;
+   822→  
+   823→  // Photo info overlay (if PN exists)
+   824→  if (photo.pn) {
+   825→    slide.addShape(slide._slideLayout?._presLayout?.pptx?.ShapeType?.rect || 'rect', {
+   826→      x: x,
+   827→      y: y - 0.4,
+   828→      w: w,
+   829→      h: 0.35,
+   830→      fill: { color: '000000', transparency: 70 },
+   831→    });
+   832→    
+   833→    let infoText = `${isTranslated ? 'Part Number:' : 'Numero da Peça:'} ${photo.pn}`;
+   834→    if (photo.partName) infoText += ` ${photo.partName}`;
+   835→    if (photo.quantity) infoText += ` ${isTranslated ? 'Qty:' : 'Qtd:'} ${photo.quantity}`;
+   836→    
+   837→    slide.addText(infoText, {
+   838→      x: x + 0.1,
+   839→      y: y - 0.35,
+   840→      w: w - 0.2,
+   841→      h: 0.25,
+   842→      fontSize: 9,
+   843→      color: 'FFFFFF',
+   844→      fontFace: 'Arial',
+   845→    });
+   846→  }
+   847→  
+   848→  // Primary Photo
+   849→  if (photo.imageData) {
+   850→    const processed = await maybeCoverCropImage(photo.editedImageData || photo.imageData, { targetW: photoWidth, targetH: h });
+   851→    slide.addImage({
+   852→      data: processed || '',
+   853→      x: x,
+   854→      y: y,
+   855→      w: photoWidth,
+   856→      h: h,
+   857→    });
+   858→  }
+   859→  
+   860→  // Secondary Photo (lado a lado)
+   861→  if (photo.secondaryImageData) {
+   862→    const secondX = hasSecondaryPhoto ? x + photoWidth + 0.1 : x;
+   863→    const secondW = hasSecondaryPhoto ? photoWidth : w;
+   864→    const processed = await maybeCoverCropImage(photo.secondaryImageData, { targetW: secondW, targetH: h });
+   865→    slide.addImage({
+   866→      data: processed,
+   867→      x: secondX,
+   868→      y: y,
+   869→      w: secondW,
+   870→      h: h,
+   871→    });
+   872→  }
+   873→  
+   874→  // Photo reference badge
+   875→  const refLabel = isTranslated ? `Photo ${photoRef}` : `Foto ${photoRef}`;
+   876→  slide.addShape(slide._slideLayout?._presLayout?.pptx?.ShapeType?.rect || 'rect', {
+   877→    x: x + 0.08,
+   878→    y: y + h - 0.38,
+   879→    w: 0.7,
+   880→    h: 0.3,
+   881→    fill: { color: '000000', transparency: 40 },
+   882→    rectRadius: 0.04,
+   883→  });
+   884→  slide.addText(refLabel, {
+   885→    x: x + 0.08,
+   886→    y: y + h - 0.38,
+   887→    w: 0.7,
+   888→    h: 0.3,
+   889→    fontSize: 8,
+   890→    color: 'FFFFFF',
+   891→    fontFace: 'Arial',
+   892→    bold: true,
+   893→    align: 'center',
+   894→    valign: 'middle',
+   895→  });
+   896→
+   897→  // Description
+   898→  if (photo.description) {
+   899→    slide.addShape(slide._slideLayout?._presLayout?.pptx?.ShapeType?.rect || 'rect', {
+   900→      x: x,
+   901→      y: y + h,
+   902→      w: w,
+   903→      h: 0.6,
+   904→      fill: { color: 'FF6600' },
+   905→    });
+   906→    
+   907→    slide.addText(photo.description.substring(0, 150), {
+   908→      x: x + 0.1,
+   909→      y: y + h + 0.05,
+   910→      w: w - 0.2,
+   911→      h: 0.5,
+   912→      fontSize: 8,
+   913→      color: 'FFFFFF',
+   914→      fontFace: 'Arial',
+   915→    });
+   916→  }
+   917→}
+   918→
+   919→// Interface for hierarchical parts structure
+   920→interface PartRow {
+   921→  pn: string;
+   922→  serialNumber: string;
+   923→  partName: string;
+   924→  quantity: string;
+   925→  isSubPart: boolean;
+   926→  parentPn?: string;
+   927→  indent: number;
+   928→  photoRef?: string;
+   929→}
+   930→
+   931→function generatePartsTableSlides(
+   932→  pptx: pptxgen, 
+   933→  photos: PhotoData[], 
+   934→  additionalParts: AdditionalPart[],
+   935→  language: Language
+   936→) {
+   937→  const isTranslated = language !== 'pt';
+   938→  // Build photo ref maps (same numbering as generatePhotoSlides)
+   939→  const photosWithImages = photos.filter(p => p.imageData);
+   940→  const photoRefMap = new Map<string, string>();   // PN → photo number
+   941→  const photoIdRefMap = new Map<string, string>();  // photo ID → photo number
+   942→  photosWithImages.forEach((p, idx) => {
+   943→    if (p.pn) photoRefMap.set(p.pn, String(idx + 1));
+   944→    photoIdRefMap.set(p.id, String(idx + 1));
+   945→  });
+   946→
+   947→  // Build hierarchical parts structure
+   948→  const partRows: PartRow[] = [];
+   949→  
+   950→  // Process each photo that should be in the table (has PN or has sub-parts)
+   951→  photos
+   952→    .filter(p => photoShouldBeInPartsTable(p, additionalParts))
+   953→    .forEach(photo => {
+   954→      const displayPn = getDisplayPn(photo, additionalParts);
+   955→      const photoRef = photo.pn
+   956→        ? photoRefMap.get(photo.pn)
+   957→        : photoIdRefMap.get(photo.id);
+   958→      
+   959→      // Add main part
+   960→      partRows.push({
+   961→        pn: displayPn,
+   962→        serialNumber: photo.serialNumber || '',
+   963→        partName: photo.partName || '-',
+   964→        quantity: photo.quantity || '-',
+   965→        isSubPart: false,
+   966→        indent: 0,
+   967→        photoRef,
+   968→      });
+   969→      
+   970→      // Find and add all sub-parts for this photo
+   971→      const subParts = getSubPartsForPhoto(photo, additionalParts);
+   972→      subParts.forEach(subPart => {
+   973→        partRows.push({
+   974→          pn: subPart.pn,
+   975→          serialNumber: subPart.serialNumber || '',
+   976→          partName: subPart.partName,
+   977→          quantity: subPart.quantity,
+   978→          isSubPart: true,
+   979→          parentPn: displayPn,
+   980→          indent: 1,
+   981→          photoRef,
+   982→        });
+   983→      });
+   984→    });
+   985→  
+   986→  if (partRows.length === 0) return;
+   987→  
+   988→  // Calculate slides needed (8 rows per slide - peças principais + sub-peças)
+   989→  const rowsPerSlide = 8;
+   990→  const slidesNeeded = Math.ceil(partRows.length / rowsPerSlide);
+   991→  
+   992→  for (let slideIndex = 0; slideIndex < slidesNeeded; slideIndex++) {
+   993→    const slide = pptx.addSlide();
+   994→    addStandardHeader(slide, isTranslated ? 'PARTS TABLE' : 'TABELA DE PEÇAS');
+   995→    
+   996→    // Table title with page indicator if multiple slides
+   997→    const titleText = slidesNeeded > 1 
+   998→      ? `${isTranslated ? 'Parts Table' : 'Tabela de Peças'} (${slideIndex + 1}/${slidesNeeded})`
+   999→      : (isTranslated ? 'Parts Table (Part Number)' : 'Tabela de Peças (Numero da Peça)');
+  1000→    
+  1001→    slide.addText(titleText, {
+  1002→      x: 0.5,
+  1003→      y: 1.2,
+  1004→      w: 8,
+  1005→      h: 0.4,
+  1006→      fontSize: 14,
+  1007→      bold: true,
+  1008→      color: '000000',
+  1009→      fontFace: 'Arial',
+  1010→    });
+  1011→    
+  1012→    // Table header
+  1013→    const headerY = 1.7;
+  1014→    slide.addShape(pptx.ShapeType.rect, {
+  1015→      x: 0.5,
+  1016→      y: headerY,
+  1017→      w: 9,
+  1018→      h: 0.4,
+  1019→      fill: { color: '000000' },
+  1020→    });
+  1021→    
+  1022→    const headers = [
+  1023→      { text: isTranslated ? 'Ref' : 'Ref', x: 0.5, w: 0.6 },
+  1024→      { text: isTranslated ? 'PN (Serial)' : 'PN (Serial)', x: 1.1, w: 2.2 },
+  1025→      { text: isTranslated ? 'Part Name' : 'Nome da Peça', x: 3.3, w: 2.6 },
+  1026→      { text: isTranslated ? 'Qty' : 'Qtd', x: 5.9, w: 1 },
+  1027→      { text: isTranslated ? 'Type' : 'Tipo', x: 6.9, w: 2.6 },
+  1028→    ];
+  1029→    
+  1030→    headers.forEach(header => {
+  1031→      slide.addText(header.text, {
+  1032→        x: header.x,
+  1033→        y: headerY + 0.05,
+  1034→        w: header.w,
+  1035→        h: 0.3,
+  1036→        fontSize: 10,
+  1037→        bold: true,
+  1038→        color: 'FFFFFF',
+  1039→        fontFace: 'Arial',
+  1040→        align: 'center',
+  1041→      });
+  1042→    });
+  1043→    
+  1044→    // Table rows
+  1045→    const startIdx = slideIndex * rowsPerSlide;
+  1046→    const endIdx = Math.min(startIdx + rowsPerSlide, partRows.length);
+  1047→    const slideParts = partRows.slice(startIdx, endIdx);
+  1048→    
+  1049→    let rowY = headerY + 0.4;
+  1050→    const rowHeight = 0.35;
+  1051→    
+  1052→    slideParts.forEach((part, idx) => {
+  1053→      // Row background - different colors for main and sub-parts
+  1054→      const bgColor = part.isSubPart ? 'FFF5E6' : (idx % 2 === 0 ? 'F8F9FA' : 'FFFFFF');
+  1055→      slide.addShape(pptx.ShapeType.rect, {
+  1056→        x: 0.5,
+  1057→        y: rowY,
+  1058→        w: 9,
+  1059→        h: rowHeight,
+  1060→        fill: { color: bgColor },
+  1061→        line: part.isSubPart ? { color: 'FFE0B2', width: 0.5 } : undefined,
+  1062→      });
+  1063→      
+  1064→      // Ref column (Foto X)
+  1065→      const refText = part.photoRef 
+  1066→        ? (isTranslated ? `Photo ${part.photoRef}` : `Foto ${part.photoRef}`)
+  1067→        : '-';
+  1068→      slide.addText(refText, {
+  1069→        x: 0.5,
+  1070→        y: rowY + 0.05,
+  1071→        w: 0.6,
+  1072→        h: rowHeight - 0.1,
+  1073→        fontSize: part.isSubPart ? 8 : 9,
+  1074→        color: part.photoRef ? 'FF6600' : '999999',
+  1075→        fontFace: 'Arial',
+  1076→        align: 'center',
+  1077→        valign: 'middle',
+  1078→        bold: !!part.photoRef,
+  1079→      });
+  1080→
+  1081→      // Sub-part indicator (arrow or dash)
+  1082→      if (part.isSubPart) {
+  1083→        slide.addText('└─', {
+  1084→          x: 1.1,
+  1085→          y: rowY + 0.05,
+  1086→          w: 0.3,
+  1087→          h: rowHeight - 0.1,
+  1088→          fontSize: 9,
+  1089→          color: 'FF6600',
+  1090→          fontFace: 'Arial',
+  1091→          align: 'center',
+  1092→          valign: 'middle',
+  1093→        });
+  1094→      }
+  1095→      
+  1096→      // Part Number with Serial (with indent for sub-parts)
+  1097→      const pnX = part.isSubPart ? 1.35 : 1.1;
+  1098→      const pnText = part.serialNumber 
+  1099→        ? `${part.pn} (${part.serialNumber})`
+  1100→        : part.pn;
+  1101→      slide.addText(pnText, {
+  1102→        x: pnX,
+  1103→        y: rowY + 0.05,
+  1104→        w: part.isSubPart ? 1.95 : 2.2,
+  1105→        h: rowHeight - 0.1,
+  1106→        fontSize: part.isSubPart ? 8 : 9,
+  1107→        color: part.isSubPart ? 'CC5200' : '000000',
+  1108→        fontFace: 'Arial',
+  1109→        align: 'center',
+  1110→        valign: 'middle',
+  1111→        italic: part.isSubPart,
+  1112→      });
+  1113→      
+  1114→      // Part Name
+  1115→      slide.addText(part.partName, {
+  1116→        x: 3.3,
+  1117→        y: rowY + 0.05,
+  1118→        w: 2.6,
+  1119→        h: rowHeight - 0.1,
+  1120→        fontSize: part.isSubPart ? 8 : 9,
+  1121→        color: part.isSubPart ? '666666' : '000000',
+  1122→        fontFace: 'Arial',
+  1123→        align: 'center',
+  1124→        valign: 'middle',
+  1125→        italic: part.isSubPart,
+  1126→      });
+  1127→      
+  1128→      // Quantity
+  1129→      slide.addText(part.quantity, {
+  1130→        x: 5.9,
+  1131→        y: rowY + 0.05,
+  1132→        w: 1,
+  1133→        h: rowHeight - 0.1,
+  1134→        fontSize: part.isSubPart ? 8 : 9,
+  1135→        color: '000000',
+  1136→        fontFace: 'Arial',
+  1137→        align: 'center',
+  1138→        valign: 'middle',
+  1139→      });
+  1140→      
+  1141→      // Type column
+  1142→      const typeText = part.isSubPart 
+  1143→        ? (isTranslated ? '↳ Sub-part' : '↳ Sub-peça')
+  1144→        : (isTranslated ? 'Main' : 'Principal');
+  1145→      
+  1146→      slide.addText(typeText, {
+  1147→        x: 6.9,
+  1148→        y: rowY + 0.05,
+  1149→        w: 2.6,
+  1150→        h: rowHeight - 0.1,
+  1151→        fontSize: part.isSubPart ? 8 : 9,
+  1152→        color: part.isSubPart ? 'FF6600' : '000000',
+  1153→        fontFace: 'Arial',
+  1154→        align: 'center',
+  1155→        valign: 'middle',
+  1156→        italic: part.isSubPart,
+  1157→      });
+  1158→      
+  1159→      rowY += rowHeight;
+  1160→    });
+  1161→    
+  1162→    addStandardFooter(slide);
+  1163→  }
+  1164→}
+  1165→
+  1166→function generateConclusionSlide(pptx: pptxgen, conclusion: string, language: Language) {
+  1167→  const isTranslated = language !== 'pt';
+  1168→  const slide = pptx.addSlide();
+  1169→  addStandardHeader(slide, isTranslated ? 'CONCLUSION' : 'CONCLUSÃO');
+  1170→  
+  1171→  // Title
+  1172→  slide.addText(isTranslated ? 'Conclusion' : 'Conclusão', {
+  1173→    x: 0.5,
+  1174→    y: 1.2,
+  1175→    w: 8,
+  1176→    h: 0.4,
+  1177→    fontSize: 14,
+  1178→    bold: true,
+  1179→    color: '000000',
+  1180→    fontFace: 'Arial',
+  1181→  });
+  1182→  
+  1183→  // Conclusion text
+  1184→  slide.addText(conclusion, {
+  1185→    x: 0.5,
+  1186→    y: 1.8,
+  1187→    w: 9,
+  1188→    h: 4,
+  1189→    fontSize: 10,
+  1190→    color: '000000',
+  1191→    fontFace: 'Arial',
+  1192→    valign: 'top',
+  1193→  });
+  1194→  
+  1195→  addStandardFooter(slide);
+  1196→}
+  1197→
+  1198→function generateFinalSlide(pptx: pptxgen, language: Language = 'pt', reportId?: string) {
+  1199→  const isTranslated = language !== 'pt';
+  1200→  const slide = pptx.addSlide();
+  1201→  
+  1202→  // Separator line
+  1203→  slide.addShape(pptx.ShapeType.rect, {
+  1204→    x: 4.5,
+  1205→    y: 0.8,
+  1206→    w: 1,
+  1207→    h: 0.08,
+  1208→    fill: { color: 'FF6600' },
+  1209→  });
+  1210→  
+  1211→  // Logo
+  1212→  slide.addImage({
+  1213→    data: LOGO_BASE64,
+  1214→    x: 3.5,
+  1215→    y: 1.1,
+  1216→    w: 3,
+  1217→    h: 1.7,
+  1218→    sizing: { type: 'contain' },
+  1219→  });
+  1220→  
+  1221→  // Safety quote
+  1222→  slide.addText('"If it\'s not safe, don\'t do it!"', {
+  1223→    x: 1,
+  1224→    y: 3.0,
+  1225→    w: 8,
+  1226→    h: 0.8,
+  1227→    fontSize: 28,
+  1228→    bold: true,
+  1229→    color: 'FF6600',
+  1230→    fontFace: 'Arial',
+  1231→    align: 'center',
+  1232→  });
+  1233→  
+  1234→  slide.addText('"There is nothing so important and urgent that it can\'t be done safely"', {
+  1235→    x: 1,
+  1236→    y: 4.0,
+  1237→    w: 8,
+  1238→    h: 0.6,
+  1239→    fontSize: 22,
+  1240→    bold: true,
+  1241→    color: 'FF6600',
+  1242→    fontFace: 'Arial',
+  1243→    align: 'center',
+  1244→  });
+  1245→  
+  1246→  // End text
+  1247→  slide.addText(isTranslated ? 'END' : 'FIM', {
+  1248→    x: 4,
+  1249→    y: 5.0,
+  1250→    w: 2,
+  1251→    h: 0.8,
+  1252→    fontSize: 28,
+  1253→    bold: true,
+  1254→    color: 'FF6600',
+  1255→    fontFace: 'Arial',
+  1256→    align: 'center',
+  1257→  });
+  1258→  
+  1259→  // Report ID reference
+  1260→  if (reportId) {
+  1261→    slide.addText(`ID: ${reportId}`, {
+  1262→      x: 7,
+  1263→      y: 6.7,
+  1264→      w: 2.7,
+  1265→      h: 0.25,
+  1266→      fontSize: 7,
+  1267→      color: '999999',
+  1268→      fontFace: 'Arial',
+  1269→      align: 'right',
+  1270→    });
+  1271→  }
+  1272→
+  1273→  // Footer
+  1274→  slide.addText(isTranslated ? '© 2024 - Services Department | All rights reserved' : '© 2024 - Departamento de Serviços | Todos os direitos reservados', {
+  1275→    x: 0.3,
+  1276→    y: 7,
+  1277→    w: 9.4,
+  1278→    h: 0.3,
+  1279→    fontSize: 8,
+  1280→    color: '666666',
+  1281→    fontFace: 'Arial',
+  1282→    align: 'center',
+  1283→  });
+  1284→}
+  1285→
+  1286→// Header específico para slides de categoria - título sem quebra de linha
+  1287→function addCategoryHeader(slide: pptxgen.Slide, title: string) {
+  1288→  // Logo
+  1289→  slide.addImage({
+  1290→    data: LOGO_BASE64,
+  1291→    x: SLIDE_MARGIN,
+  1292→    y: 0.2,
+  1293→    w: 1.5,
+  1294→    h: 0.5,
+  1295→    sizing: { type: 'contain' },
+  1296→  });
+  1297→  
+  1298→  // Title - em uma única linha, ajustando automaticamente
+  1299→  slide.addText(title, {
+  1300→    x: SLIDE_MARGIN,
+  1301→    y: 0.2,
+  1302→    w: 10 - SLIDE_MARGIN * 2,
+  1303→    h: 0.5,
+  1304→    fontSize: 10,
+  1305→    bold: true,
+  1306→    color: '000000',
+  1307→    fontFace: 'Arial',
+  1308→    align: 'right',
+  1309→    valign: 'middle',
+  1310→    autoFit: {
+  1311→      shrinkText: true,
+  1312→      fontSizeMin: 6, // Tamanho mínimo da fonte
+  1313→    },
+  1314→  });
+  1315→  
+  1316→  // Separator line
+  1317→  slide.addShape('rect' as any, {
+  1318→    x: 0.3,
+  1319→    y: 0.9,
+  1320→    w: 9.4,
+  1321→    h: 0.04,
+  1322→    fill: { color: 'FF6600' },
+  1323→  });
+  1324→}
+  1325→
+  1326→function addStandardHeader(slide: pptxgen.Slide, title: string) {
+  1327→  // Logo
+  1328→  slide.addImage({
+  1329→    data: LOGO_BASE64,
+  1330→    x: 0.3,
+  1331→    y: 0.2,
+  1332→    w: 1.5,
+  1333→    h: 0.5,
+  1334→    sizing: { type: 'contain' },
+  1335→  });
+  1336→  
+  1337→  // Title - largura total para evitar quebra de linha
+  1338→  slide.addText(title, {
+  1339→    x: 0.3,
+  1340→    y: 0.2,
+  1341→    w: 9.4,
+  1342→    h: 0.5,
+  1343→    fontSize: 10,
+  1344→    bold: true,
+  1345→    color: '000000',
+  1346→    fontFace: 'Arial',
+  1347→    align: 'right',
+  1348→    valign: 'middle',
+  1349→    autoFit: {
+  1350→      shrinkText: true,
+  1351→      fontSizeMin: 6,
+  1352→    },
+  1353→  });
+  1354→  
+  1355→  // Separator line
+  1356→  slide.addShape('rect' as any, {
+  1357→    x: 0.3,
+  1358→    y: 0.9,
+  1359→    w: 9.4,
+  1360→    h: 0.04,
+  1361→    fill: { color: 'FF6600' },
+  1362→  });
+  1363→}
+  1364→
+  1365→function addStandardFooter(slide: pptxgen.Slide) {
+  1366→  slide.addText('© 2024 - Departamento de Manutenção Industrial | Todos os direitos reservados', {
+  1367→    x: 0.3,
+  1368→    y: 7,
+  1369→    w: 9.4,
+  1370→    h: 0.3,
+  1371→    fontSize: 8,
+  1372→    color: '000000',
+  1373→    fontFace: 'Arial',
+  1374→    align: 'center',
+  1375→  });
+  1376→}
+  1377→
+  1378→function formatDateForFileName(dateString: string): string {
+  1379→  if (!dateString) return new Date().toISOString().split('T')[0];
+  1380→  
+  1381→  // Parse date manually to avoid timezone issues
+  1382→  const parts = dateString.split('-');
+  1383→  if (parts.length === 3) {
+  1384→    const day = parts[2].padStart(2, '0');
+  1385→    const month = parts[1].padStart(2, '0');
+  1386→    const year = parts[0];
+  1387→    return `${day}-${month}-${year}`;
+  1388→  }
+  1389→  
+  1390→  // Fallback: use current date
+  1391→  const today = new Date();
+  1392→  const day = String(today.getDate()).padStart(2, '0');
+  1393→  const month = String(today.getMonth() + 1).padStart(2, '0');
+  1394→  const year = today.getFullYear();
+  1395→  return `${day}-${month}-${year}`;
+  1396→}
+  1397→
+  1398→function formatDateForDisplay(dateString: string): string {
+  1399→  if (!dateString) return '';
+  1400→  
+  1401→  // Parse date manually to avoid timezone issues (YYYY-MM-DD format)
+  1402→  const parts = dateString.split('-');
+  1403→  if (parts.length === 3) {
+  1404→    const day = parts[2].padStart(2, '0');
+  1405→    const month = parts[1].padStart(2, '0');
+  1406→    const year = parts[0];
+  1407→    return `${day}/${month}/${year}`;
+  1408→  }
+  1409→  
+  1410→  return dateString;
+  1411→}
+  1412→
