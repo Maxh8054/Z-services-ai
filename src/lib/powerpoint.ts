@@ -8,12 +8,12 @@ import { coverCropImage, maybeCoverCropImage, getImageInfo } from './coverCrop';
 // Photo dimensions in inches
 const SLIDE_MARGIN = 0.15;  // Reduced lateral margin
 const PHOTO_LANDSCAPE_W = 4.4;
-const PHOTO_LANDSCAPE_H = 3.6;
+const PHOTO_LANDSCAPE_H = 3.0;
 const PHOTO_PORTRAIT_W = 3.1;
-const PHOTO_PORTRAIT_H = 3.6;
+const PHOTO_PORTRAIT_H = 3.0;
 // When one slot is dual (side-by-side), it gets extra width
 const DUAL_SLOT_W = 5.6;  // wider slot for dual photo container
-const DUAL_PHOTO_H = 3.6;
+const DUAL_PHOTO_H = 3.0;
 
 // Sanitize text for use in filenames
 function sanitizeForFilename(text: string): string {
@@ -875,9 +875,9 @@ async function addPhotoToSlide(
   if (photo.pn) {
     slide.addShape(slide._slideLayout?._presLayout?.pptx?.ShapeType?.rect || 'rect', {
       x: x,
-      y: y - 0.4,
+      y: y - 0.25,
       w: w,
-      h: 0.35,
+      h: 0.3,
       fill: { color: '000000', transparency: 70 },
     });
     
@@ -887,10 +887,10 @@ async function addPhotoToSlide(
     
     slide.addText(infoText, {
       x: x + 0.1,
-      y: y - 0.35,
+      y: y - 0.22,
       w: w - 0.2,
-      h: 0.25,
-      fontSize: 9,
+      h: 0.22,
+      fontSize: 8,
       color: 'FFFFFF',
       fontFace: 'Arial',
     });
