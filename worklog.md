@@ -106,3 +106,41 @@ Stage Summary:
 - Fix: Pre-process images with canvas cover-crop before sending to pptxgenjs
 - Files changed: `src/lib/coverCrop.ts` (new), `src/lib/powerpoint.ts`
 - Web app reverted to original object-cover behavior
+---
+Task ID: 1
+Agent: Main
+Task: Fix parts table to include sub-parts without main PN and fix duplication bug
+
+Work Log:
+- Created shared utility /src/lib/partsUtils.ts with getSubPartsForPhoto, photoHasSubPartData, photoShouldBeInPartsTable, getDisplayPn, getOrphanSubParts
+- Updated PPT generation (powerpoint.ts) to use new utilities - photos without PN but with sub-parts now show with "+++++" as PN
+- Updated Home tab parts table in page.tsx to use new utilities
+- Updated Inspeção tab parts table in page.tsx to use new utilities
+- Updated Excel exports (excelExport.ts) for both Home and Inspeção to include sub-parts without PN
+- Fixed duplication bug: replaced all inline filter conditions with photoHasSubPartData/getSubPartsForPhoto which guard against empty-string matching
+- Fixed AdditionalPartsSection internal filter to require both parentPn and the parent PN to be non-empty before matching
+- Verified: lint passes, both tabs render correctly, no console errors
+
+Stage Summary:
+- Parts table now shows sub-parts even when main photo has no PN (displays "+++++" as placeholder PN)
+- Duplication bug fixed: empty-PN photos no longer show all empty-parentPn sub-parts
+- All 5 locations updated: PPT, Home UI, Inspeção UI, Excel Home, Excel Inspeção
+
+---
+Task ID: 3
+Agent: Main Agent
+Task: Remove parentPn fallback matching - sub-parts match ONLY by photoId
+
+Work Log:
+- Identified root cause: `getSubPartsForPhoto` in partsUtils.ts had a secondary `parentPn` fallback that caused duplication when two photos share the same PN
+- Removed the `parentPn` fallback line from `getSubPartsForPhoto()` — now matches ONLY by `photoId`
+- Updated `AdditionalPartsSection` filter in page.tsx — removed `(!p.photoId && p.parentPn && parentPn && p.parentPn === parentPn)` fallback
+- Updated stale comments in excelExport.ts ("matched by photoId or parentPn" → "matched by photoId")
+- Each photo now has its own sub-parts strictly linked by photo reference (photoId), independent of PN
+- Verified: lint passes clean, dev server compiles with no errors
+
+Stage Summary:
+- Sub-parts are now matched EXCLUSIVELY by photoId
+- When two photos have the same PN, each photo only shows its own sub-parts (no duplication)
+- "+++++" placeholder still works for photos without PN that have sub-parts
+- Files changed: src/lib/partsUtils.ts, src/app/page.tsx, src/lib/excelExport.ts

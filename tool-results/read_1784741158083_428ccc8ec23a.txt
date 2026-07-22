@@ -1,0 +1,994 @@
+     1→// Translation system for Z-Services AI
+     2→
+     3→export type Language = 'pt' | 'en' | 'ja' | 'zh';
+     4→
+     5→export const LANGUAGE_NAMES: Record<Language, string> = {
+     6→  pt: 'Português',
+     7→  en: 'English',
+     8→  ja: '日本語',
+     9→  zh: '中文',
+    10→};
+    11→
+    12→export const LANGUAGE_FLAGS: Record<Language, string> = {
+    13→  pt: '🇧🇷',
+    14→  en: '🇺🇸',
+    15→  ja: '🇯🇵',
+    16→  zh: '🇨🇳',
+    17→};
+    18→
+    19→// Static translations
+    20→export const translations: Record<Language, Record<string, string>> = {
+    21→  pt: {
+    22→    // Header & Sidebar
+    23→    'app.title': 'Z-Services AI',
+    24→    'tab.home': 'Relatório',
+    25→    'tab.inspecao': 'Inspeção',
+    26→    
+    27→    // Cover Page
+    28→    'report.technicalReport': 'Relatório Técnico',
+    29→    'report.executionInfo': 'Informações da Execução',
+    30→    'report.tag': 'TAG',
+    31→    'report.modelo': 'Modelo',
+    32→    'report.sn': 'SN',
+    33→    'report.entrega': 'Entrega',
+    34→    'report.cliente': 'Cliente',
+    35→    'report.descricao': 'Descrição',
+    36→    'report.machineDown': 'MACHINE DOWN?',
+    37→    'report.reportData': 'DADOS DO RELATÓRIO',
+    38→    'report.executionDate': 'Data da Execução',
+    39→    'report.endDate': 'Data Final',
+    40→    'report.endDateOptional': 'Data Final (Opcional)',
+    41→    'report.workOrder': 'OS de Execução',
+    42→    'report.workOrderOptional': 'OS de Execução (Opcional)',
+    43→    'report.performers': 'Nomes dos Executantes',
+    44→    'report.hourMeter': 'Horímetro',
+    45→    
+    46→    // Machine Identification
+    47→    'machine.identification': 'Identificação da Máquina',
+    48→    'machine.equipmentPhoto': 'Foto do Equipamento',
+    49→    'machine.hourMeterPhoto': 'Foto do Horímetro',
+    50→    'machine.serialPhoto': 'Foto do Serial Number',
+    51→    'machine.localPhoto': 'Foto do Local',
+    52→    'machine.equipmentTag': 'TAG do Equipamento',
+    53→    'machine.serialNumber': 'Número de Série',
+    54→    
+    55→    // Photo Registration
+    56→    'photos.title': 'REGISTRO FOTOGRÁFICO',
+    57→    'photos.photoCount': '{count} fotos',
+    58→    'photos.addPhoto': 'Adicionar Foto',
+    59→    'photos.photo': 'Foto',
+    60→    'photos.clickToAdd': 'Clique para adicionar foto',
+    61→    'photos.noPhoto': 'Sem Foto',
+    62→    
+    63→    // Photo Fields
+    64→    'photo.pn': 'PN',
+    65→    'photo.pnPlaceholder': 'Numero da Peça',
+    66→    'photo.serial': 'Serial',
+    67→    'photo.serialPlaceholder': 'Serial',
+    68→    'photo.partName': 'Peça',
+    69→    'photo.partNamePlaceholder': 'Nome da peça',
+    70→    'photo.quantity': 'Qtd',
+    71→    'photo.quantityPlaceholder': 'Qtd',
+    72→    'photo.criticality': 'Criticidade',
+    73→    'photo.criticalityHigh': 'Alta',
+    74→    'photo.criticalityMedium': 'Média',
+    75→    'photo.criticalityLow': 'Baixa',
+    76→    'photo.description': 'Descrição',
+    77→    'photo.descriptionPlaceholder': 'Descrição...',
+    78→    'photo.circles': 'círculo(s)',
+    79→    
+    80→    // Sub-parts
+    81→    'subparts.title': 'Sub-peças',
+    82→    'subparts.partsOf': 'Peças Adicionais (Sub-peças de {pn})',
+    83→    'subparts.type': 'Sub-peça',
+    84→    
+    85→    // Categories (Home tab)
+    86→    'category.contexto': 'Contexto da intervenção',
+    87→    'category.contextoDesc': 'Sintoma, data, OS/chamado, objetivo, escopo',
+    88→    'category.componente': 'Foto do componente em questão',
+    89→    'category.componenteDesc': 'Condição atual de falha com PN',
+    90→    'category.preparacao': 'Preparação de peças/recursos',
+    91→    'category.preparacaoDesc': 'Fotos + lista de peças (filtros, recursos, coisas que precisam para fazer a atividade)',
+    92→    'category.desmontagem': 'Desmontagem',
+    93→    'category.desmontagemDesc': 'Fotos longe/médio/perto + observações (primeira parte da atividade)',
+    94→    'category.diagnostico': 'Diagnóstico',
+    95→    'category.diagnosticoDesc': 'O que foi identificado, evidências, medições',
+    96→    'category.execucao': 'Execução do reparo/ajuste/substituição',
+    97→    'category.execucaoDesc': 'Passos críticos, torques, parâmetros',
+    98→    'category.montagem': 'Montagem',
+    99→    'category.montagemDesc': 'Fotos do componente instalado',
+   100→    'category.testes': 'Testes e medições',
+   101→    'category.testesDesc': 'Antes/depois',
+   102→    
+   103→    // Parts Table
+   104→    'partsTable.title': 'Tabela de Peças',
+   105→    'partsTable.pnSerial': 'PN (Serial)',
+   106→    'partsTable.partName': 'Nome da Peça',
+   107→    'partsTable.qty': 'Qtd',
+   108→    'partsTable.type': 'Tipo',
+   109→    'partsTable.criticality': 'Criticidade',
+   110→    'partsTable.main': 'Principal',
+   111→    'partsTable.subpart': 'Sub-peça',
+   112→    'partsTable.exportExcel': 'Exportar Excel',
+   113→    
+   114→    // Conclusion
+   115→    'conclusion.title': 'Conclusão',
+   116→    'conclusion.placeholder': 'Digite a conclusão do relatório...',
+   117→    
+   118→    // Actions
+   119→    'action.clear': 'Limpar Relatório',
+   120→    'action.export': 'Exportar Dados',
+   121→    'action.import': 'Importar Dados',
+   122→    'action.downloadPPT': 'Baixar PowerPoint',
+   123→    'action.importExport': 'Importar / Exportar',
+   124→    'action.importExportDesc': 'Salvar ou carregar dados do relatório:',
+   125→    'action.download': 'Baixar Relatório',
+   126→    'action.downloadDesc': 'Escolha o formato de download:',
+   127→    'action.pptDesc': 'Relatório completo com imagens',
+   128→    'action.exportJson': 'Exportar JSON',
+   129→    'action.exportJsonDesc': 'Baixar dados como arquivo .json',
+   130→    'action.importJson': 'Importar JSON',
+   131→    'action.importJsonDesc': 'Carregar dados de arquivo .json',
+   132→    'action.addPhoto': 'Adicionar Foto',
+   133→    'action.translate': 'Traduzir Conteúdo',
+   134→    'action.add': 'Adicionar',
+   135→    'action.remove': 'Remover',
+   136→    'action.edit': 'Editar',
+   137→    'action.save': 'Salvar',
+   138→    'action.cancel': 'Cancelar',
+   139→    'action.confirm': 'Confirmar',
+   140→    
+   141→    // Photo Editor
+   142→    'editor.title': 'Editor de Foto',
+   143→    'editor.select': 'Selecionar',
+   144→    'editor.circle': 'Círculo',
+   145→    'editor.circleWithPhoto': 'Círculo com foto',
+   146→    'editor.arrow': 'Seta',
+   147→    'editor.color': 'Cor:',
+   148→    'editor.deleteSelected': 'Delete para remover • Esc para cancelar',
+   149→    'editor.clickToSelect': 'Clique para selecionar, arraste para mover',
+   150→    'editor.clickToAddCircle': 'Clique para adicionar círculo',
+   151→    'editor.clickToAddPhotoCircle': 'Clique para adicionar círculo com foto',
+   152→    'editor.clickAndDragArrow': 'Clique e arraste para desenhar seta',
+   153→    'editor.addPhotoToCircle': 'Adicionar Foto ao Círculo',
+   154→    'editor.choosePhoto': 'Escolha uma foto:',
+   155→    'editor.upload': 'Upload',
+   156→    'editor.paste': 'Colar',
+   157→    
+   158→    // Photo Options Dialog
+   159→    'photoOptions.title': 'Opções da Foto',
+   160→    'photoOptions.uploadFile': 'Upload de Arquivo',
+   161→    'photoOptions.openCamera': 'Abrir Câmera',
+   162→    'photoOptions.pasteClipboard': 'Colar da Área de Transferência',
+   163→    'photoOptions.viewFullscreen': 'Ver em Tela Cheia',
+   164→    'photoOptions.replacePhoto': 'Substituir Foto',
+   165→    
+   166→    // Fullscreen Viewer
+   167→    'fullscreen.close': 'Fechar',
+   168→    'fullscreen.download': 'Baixar',
+   169→    
+   170→    // Clear Confirm Dialog
+   171→    'clearConfirm.title': 'Confirmar Limpeza',
+   172→    'clearConfirm.description': 'Tem certeza que deseja limpar todo o relatório?',
+   173→    
+   174→    // Loading
+   175→    'loading.generatingPPT': 'Gerando PowerPoint...',
+   176→    
+   177→    // Footer
+   178→    'footer.copyright': '© 2024 - Departamento de Manutenção Industrial | Todos os direitos reservados',
+   179→    
+   180→    // Placeholders
+   181→    'placeholder.tag': 'Digite ou selecione a TAG...',
+   182→    'placeholder.modelo': 'Digite o modelo',
+   183→    'placeholder.sn': 'Digite o número de série',
+   184→    'placeholder.entrega': 'Digite a data de entrega',
+   185→    'placeholder.cliente': 'Digite o nome do cliente',
+   186→    'placeholder.descricao': 'Digite a descrição',
+   187→    'placeholder.os': 'Digite a OS de execução',
+   188→    'placeholder.inspector': 'Digite o nome do inspetor',
+   189→    'placeholder.hourmeter': 'Digite o horímetro',
+   190→    
+   191→    // Select Options
+   192→    'select.no': 'No',
+   193→    'select.yes': 'Yes',
+   194→    'select.selectOption': 'Selecione...',
+   195→    
+   196→    // Table
+   197→    'table.swipe': 'Deslize para ver mais',
+   198→    
+   199→    // Spell Check
+   200→    'spellCheck.title': 'Verificar Ortografia',
+   201→    'spellCheck.foundErrors': '{count} erro(s) encontrado(s)',
+   202→    'spellCheck.applyAll': 'Corrigir Todos',
+   203→    'spellCheck.apply': 'Aplicar',
+   204→    'spellCheck.noErrors': 'Nenhum erro encontrado!',
+   205→    'spellCheck.checking': 'Verificando...',
+   206→    
+   207→    // Collaboration
+   208→    'collaboration.title': 'Colaboração em Tempo Real',
+   209→    'collaboration.description': 'Compartilhe este link para permitir que outras pessoas editem o relatório junto com você em tempo real.',
+   210→    'collaboration.share': 'Compartilhar',
+   211→    'collaboration.link': 'Link de Compartilhamento',
+   212→    'collaboration.copyLink': 'Copiar Link',
+   213→    'collaboration.copied': 'Copiado!',
+   214→    'collaboration.scanQR': 'Escaneie para acessar no celular',
+   215→    'collaboration.info': 'Como funciona:',
+   216→    'collaboration.info1': 'Todas as alterações são sincronizadas em tempo real',
+   217→    'collaboration.info2': 'Múltiplas pessoas podem editar simultaneamente',
+   218→    'collaboration.info3': 'O link expira em 24 horas',
+   219→    'collaboration.usersOnline': '{count} online',
+   220→    'collaboration.userJoined': 'Usuário entrou na sessão',
+   221→    'collaboration.userLeft': 'Usuário saiu da sessão',
+   222→    
+   223→    // History Tab (Admin)
+   224→    'tab.history': 'Histórico',
+   225→    'history.dashboard': 'Dashboard',
+   226→    'history.ranking': 'Ranking',
+   227→    'history.reports': 'Relatórios',
+   228→    'history.reportsByMonth': 'Relatórios por Mês',
+   229→    'history.reportsByUser': 'Relatórios por Colaborador',
+   230→    'history.monthlyTotal': 'Total do Mês',
+   231→    'history.noReports': 'Nenhum relatório finalizado ainda',
+   232→    'history.table.user': 'Usuário',
+   233→    'history.table.type': 'Tipo',
+   234→    'history.table.tag': 'TAG',
+   235→    'history.table.description': 'Descrição',
+   236→    'history.table.date': 'Data',
+   237→    'history.table.conclusion': 'Conclusão',
+   238→    'history.type.home': 'Relatório de Falha',
+   239→    'history.type.inspecao': 'Inspeção',
+   240→    'history.machineDown': 'Máquina Parada',
+   241→    
+   242→    // Finalize Report
+   243→    'action.finalize': 'Finalizar',
+   244→    'finalize.title': 'Finalizar Relatório',
+   245→    'finalize.confirm': 'Confirmar Finalização',
+   246→    'finalize.success': 'Relatório finalizado com sucesso!',
+   247→    'finalize.error': 'Erro ao finalizar relatório',
+   248→    'finalize.requiredFields': 'Preencha os campos obrigatórios:',
+   249→    'finalize.conclusionRequired': 'Conclusão é obrigatória',
+   250→    'finalize.executantesRequired': 'Nomes dos executantes é obrigatório',
+   251→    'finalize.tagRequired': 'TAG é obrigatória',
+   252→    'finalize.descricaoRequired': 'Descrição é obrigatória',
+   253→    'clear.confirm': 'Tem certeza que deseja limpar o relatório? Todos os dados serão perdidos.',
+   254→    
+   255→    // RDO Report
+   256→    'rdo.title': 'Relatório Executivo (RDO)',
+   257→    'rdo.generate': 'Gerar RDO',
+   258→    'rdo.download': 'Baixar RDO',
+   259→    'rdo.description': 'Relatório resumido estilo RDO (1-2 páginas)',
+   260→    'rdo.powerpoint': 'PowerPoint (Completo)',
+   261→    'rdo.executive': 'RDO',
+   262→    
+   263→    // Offline
+   264→    'offline.title': 'Modo Offline',
+   265→    'offline.status': 'Você está offline',
+   266→    'offline.syncPending': '{count} alteração(ões) pendente(s) para sincronizar',
+   267→    'offline.syncNow': 'Sincronizar Agora',
+   268→    'offline.synced': 'Sincronizado',
+   269→  },
+   270→  
+   271→  en: {
+   272→    // Header & Sidebar
+   273→    'app.title': 'Z-Services AI',
+   274→    'tab.home': 'Report',
+   275→    'tab.inspecao': 'Inspection',
+   276→    
+   277→    // Cover Page
+   278→    'report.technicalReport': 'Technical Report',
+   279→    'report.executionInfo': 'Execution Information',
+   280→    'report.tag': 'TAG',
+   281→    'report.modelo': 'Model',
+   282→    'report.sn': 'SN',
+   283→    'report.entrega': 'Delivery',
+   284→    'report.cliente': 'Customer',
+   285→    'report.descricao': 'Description',
+   286→    'report.machineDown': 'MACHINE DOWN?',
+   287→    'report.reportData': 'REPORT DATA',
+   288→    'report.executionDate': 'Execution Date',
+   289→    'report.endDate': 'End Date',
+   290→    'report.endDateOptional': 'End Date (Optional)',
+   291→    'report.workOrder': 'Work Order',
+   292→    'report.workOrderOptional': 'Work Order (Optional)',
+   293→    'report.performers': 'Names of Performers',
+   294→    'report.hourMeter': 'Hour Meter',
+   295→    
+   296→    // Machine Identification
+   297→    'machine.identification': 'Machine Identification',
+   298→    'machine.equipmentPhoto': 'Equipment Photo',
+   299→    'machine.hourMeterPhoto': 'Hour Meter Photo',
+   300→    'machine.serialPhoto': 'Serial Number Photo',
+   301→    'machine.localPhoto': 'Location Photo',
+   302→    'machine.equipmentTag': 'Equipment TAG',
+   303→    'machine.serialNumber': 'Serial Number',
+   304→    
+   305→    // Photo Registration
+   306→    'photos.title': 'PHOTOGRAPHIC RECORD',
+   307→    'photos.photoCount': '{count} photos',
+   308→    'photos.addPhoto': 'Add Photo',
+   309→    'photos.photo': 'Photo',
+   310→    'photos.clickToAdd': 'Click to add photo',
+   311→    'photos.noPhoto': 'No Photo',
+   312→    
+   313→    // Photo Fields
+   314→    'photo.pn': 'PN',
+   315→    'photo.pnPlaceholder': 'Part Number',
+   316→    'photo.serial': 'Serial',
+   317→    'photo.serialPlaceholder': 'Serial',
+   318→    'photo.partName': 'Part',
+   319→    'photo.partNamePlaceholder': 'Part name',
+   320→    'photo.quantity': 'Qty',
+   321→    'photo.quantityPlaceholder': 'Qty',
+   322→    'photo.criticality': 'Criticality',
+   323→    'photo.criticalityHigh': 'High',
+   324→    'photo.criticalityMedium': 'Medium',
+   325→    'photo.criticalityLow': 'Low',
+   326→    'photo.description': 'Description',
+   327→    'photo.descriptionPlaceholder': 'Description...',
+   328→    'photo.circles': 'circle(s)',
+   329→    
+   330→    // Sub-parts
+   331→    'subparts.title': 'Sub-parts',
+   332→    'subparts.partsOf': 'Additional Parts (Sub-parts of {pn})',
+   333→    'subparts.type': 'Sub-part',
+   334→    
+   335→    // Categories
+   336→    'category.contexto': 'Intervention Context',
+   337→    'category.contextoDesc': 'Symptom, date, work order/call, objective, scope',
+   338→    'category.componente': 'Component Photo',
+   339→    'category.componenteDesc': 'Current failure condition with PN',
+   340→    'category.preparacao': 'Parts/Resources Preparation',
+   341→    'category.preparacaoDesc': 'Photos + parts list (filters, resources, items needed for the activity)',
+   342→    'category.desmontagem': 'Disassembly',
+   343→    'category.desmontagemDesc': 'Far/medium/close photos + observations (first part of activity)',
+   344→    'category.diagnostico': 'Diagnosis',
+   345→    'category.diagnosticoDesc': 'What was identified, evidence, measurements',
+   346→    'category.execucao': 'Repair/Adjustment/Replacement Execution',
+   347→    'category.execucaoDesc': 'Critical steps, torques, parameters',
+   348→    'category.montagem': 'Assembly',
+   349→    'category.montagemDesc': 'Installed component photos',
+   350→    'category.testes': 'Tests and Measurements',
+   351→    'category.testesDesc': 'Before/after',
+   352→    
+   353→    // Parts Table
+   354→    'partsTable.title': 'Parts Table',
+   355→    'partsTable.pnSerial': 'PN (Serial)',
+   356→    'partsTable.partName': 'Part Name',
+   357→    'partsTable.qty': 'Qty',
+   358→    'partsTable.type': 'Type',
+   359→    'partsTable.criticality': 'Criticality',
+   360→    'partsTable.main': 'Main',
+   361→    'partsTable.subpart': 'Sub-part',
+   362→    'partsTable.exportExcel': 'Export Excel',
+   363→    
+   364→    // Conclusion
+   365→    'conclusion.title': 'Conclusion',
+   366→    'conclusion.placeholder': 'Enter the report conclusion...',
+   367→    
+   368→    // Actions
+   369→    'action.clear': 'Clear Report',
+   370→    'action.export': 'Export Data',
+   371→    'action.import': 'Import Data',
+   372→    'action.downloadPPT': 'Download PowerPoint',
+   373→    'action.importExport': 'Import / Export',
+   374→    'action.importExportDesc': 'Save or load report data:',
+   375→    'action.download': 'Download Report',
+   376→    'action.downloadDesc': 'Choose the download format:',
+   377→    'action.pptDesc': 'Full report with images',
+   378→    'action.exportJson': 'Export JSON',
+   379→    'action.exportJsonDesc': 'Download data as .json file',
+   380→    'action.importJson': 'Import JSON',
+   381→    'action.importJsonDesc': 'Load data from .json file',
+   382→    'action.addPhoto': 'Add Photo',
+   383→    'action.translate': 'Translate Content',
+   384→    'action.add': 'Add',
+   385→    'action.remove': 'Remove',
+   386→    'action.edit': 'Edit',
+   387→    'action.save': 'Save',
+   388→    'action.cancel': 'Cancel',
+   389→    'action.confirm': 'Confirm',
+   390→    
+   391→    // Photo Editor
+   392→    'editor.title': 'Photo Editor',
+   393→    'editor.select': 'Select',
+   394→    'editor.circle': 'Circle',
+   395→    'editor.circleWithPhoto': 'Circle with photo',
+   396→    'editor.arrow': 'Arrow',
+   397→    'editor.color': 'Color:',
+   398→    'editor.deleteSelected': 'Delete to remove • Esc to cancel',
+   399→    'editor.clickToSelect': 'Click to select, drag to move',
+   400→    'editor.clickToAddCircle': 'Click to add circle',
+   401→    'editor.clickToAddPhotoCircle': 'Click to add circle with photo',
+   402→    'editor.clickAndDragArrow': 'Click and drag to draw arrow',
+   403→    'editor.addPhotoToCircle': 'Add Photo to Circle',
+   404→    'editor.choosePhoto': 'Choose a photo:',
+   405→    'editor.upload': 'Upload',
+   406→    'editor.paste': 'Paste',
+   407→    
+   408→    // Photo Options Dialog
+   409→    'photoOptions.title': 'Photo Options',
+   410→    'photoOptions.uploadFile': 'File Upload',
+   411→    'photoOptions.openCamera': 'Open Camera',
+   412→    'photoOptions.pasteClipboard': 'Paste from Clipboard',
+   413→    'photoOptions.viewFullscreen': 'View Fullscreen',
+   414→    'photoOptions.replacePhoto': 'Replace Photo',
+   415→    
+   416→    // Fullscreen Viewer
+   417→    'fullscreen.close': 'Close',
+   418→    'fullscreen.download': 'Download',
+   419→    
+   420→    // Clear Confirm Dialog
+   421→    'clearConfirm.title': 'Confirm Clear',
+   422→    'clearConfirm.description': 'Are you sure you want to clear the entire report?',
+   423→    
+   424→    // Loading
+   425→    'loading.generatingPPT': 'Generating PowerPoint...',
+   426→    
+   427→    // Footer
+   428→    'footer.copyright': '© 2024 - Industrial Maintenance Department | All rights reserved',
+   429→    
+   430→    // Placeholders
+   431→    'placeholder.tag': 'Enter or select TAG...',
+   432→    'placeholder.modelo': 'Enter the model',
+   433→    'placeholder.sn': 'Enter the serial number',
+   434→    'placeholder.entrega': 'Enter the delivery date',
+   435→    'placeholder.cliente': 'Enter the customer name',
+   436→    'placeholder.descricao': 'Enter the description',
+   437→    'placeholder.os': 'Enter the work order',
+   438→    'placeholder.inspector': 'Enter the inspector name',
+   439→    'placeholder.hourmeter': 'Enter the hour meter',
+   440→    
+   441→    // Select Options
+   442→    'select.no': 'No',
+   443→    'select.yes': 'Yes',
+   444→    'select.selectOption': 'Select...',
+   445→    
+   446→    // Table
+   447→    'table.swipe': 'Swipe to see more',
+   448→    
+   449→    // Spell Check
+   450→    'spellCheck.title': 'Check Spelling',
+   451→    'spellCheck.foundErrors': '{count} error(s) found',
+   452→    'spellCheck.applyAll': 'Fix All',
+   453→    'spellCheck.apply': 'Apply',
+   454→    'spellCheck.noErrors': 'No errors found!',
+   455→    'spellCheck.checking': 'Checking...',
+   456→    
+   457→    // Collaboration
+   458→    'collaboration.title': 'Real-time Collaboration',
+   459→    'collaboration.description': 'Share this link to allow others to edit the report with you in real time.',
+   460→    'collaboration.share': 'Share',
+   461→    'collaboration.link': 'Share Link',
+   462→    'collaboration.copyLink': 'Copy Link',
+   463→    'collaboration.copied': 'Copied!',
+   464→    'collaboration.scanQR': 'Scan to access on mobile',
+   465→    'collaboration.info': 'How it works:',
+   466→    'collaboration.info1': 'All changes are synchronized in real time',
+   467→    'collaboration.info2': 'Multiple people can edit simultaneously',
+   468→    'collaboration.info3': 'The link expires in 24 hours',
+   469→    'collaboration.usersOnline': '{count} online',
+   470→    'collaboration.userJoined': 'User joined the session',
+   471→    'collaboration.userLeft': 'User left the session',
+   472→    
+   473→    // History Tab (Admin)
+   474→    'tab.history': 'History',
+   475→    'history.dashboard': 'Dashboard',
+   476→    'history.ranking': 'Ranking',
+   477→    'history.reports': 'Reports',
+   478→    'history.reportsByMonth': 'Reports by Month',
+   479→    'history.reportsByUser': 'Reports by Collaborator',
+   480→    'history.monthlyTotal': 'Monthly Total',
+   481→    'history.noReports': 'No finalized reports yet',
+   482→    'history.table.user': 'User',
+   483→    'history.table.type': 'Type',
+   484→    'history.table.tag': 'TAG',
+   485→    'history.table.description': 'Description',
+   486→    'history.table.date': 'Date',
+   487→    'history.table.conclusion': 'Conclusion',
+   488→    'history.type.home': 'Failure Report',
+   489→    'history.type.inspecao': 'Inspection',
+   490→    'history.machineDown': 'Machine Down',
+   491→    
+   492→    // Finalize Report
+   493→    'action.finalize': 'Finalize',
+   494→    'finalize.title': 'Finalize Report',
+   495→    'finalize.confirm': 'Confirm Finalization',
+   496→    'finalize.success': 'Report finalized successfully!',
+   497→    'finalize.error': 'Error finalizing report',
+   498→    'finalize.requiredFields': 'Fill in the required fields:',
+   499→    'finalize.conclusionRequired': 'Conclusion is required',
+   500→    'finalize.executantesRequired': 'Performer names are required',
+   501→    'finalize.tagRequired': 'TAG is required',
+   502→    'finalize.descricaoRequired': 'Description is required',
+   503→    'clear.confirm': 'Are you sure you want to clear the report? All data will be lost.',
+   504→    
+   505→    // RDO Report
+   506→    'rdo.title': 'Executive Report (RDO)',
+   507→    'rdo.generate': 'Generate RDO',
+   508→    'rdo.download': 'Download RDO',
+   509→    'rdo.description': 'Summary report in RDO style (1-2 pages)',
+   510→    'rdo.powerpoint': 'PowerPoint (Full)',
+   511→    'rdo.executive': 'RDO',
+   512→    
+   513→    // Offline
+   514→    'offline.title': 'Offline Mode',
+   515→    'offline.status': 'You are offline',
+   516→    'offline.syncPending': '{count} change(s) pending to sync',
+   517→    'offline.syncNow': 'Sync Now',
+   518→    'offline.synced': 'Synced',
+   519→  },
+   520→  
+   521→  ja: {
+   522→    // Header & Sidebar
+   523→    'app.title': 'Z-Services AI',
+   524→    'tab.home': 'レポート',
+   525→    'tab.inspecao': '検査',
+   526→    
+   527→    // Cover Page
+   528→    'report.technicalReport': '技術報告書',
+   529→    'report.executionInfo': '実行情報',
+   530→    'report.tag': 'TAG',
+   531→    'report.modelo': 'モデル',
+   532→    'report.sn': 'SN',
+   533→    'report.entrega': '納期',
+   534→    'report.cliente': '顧客',
+   535→    'report.descricao': '説明',
+   536→    'report.machineDown': 'MACHINE DOWN?',
+   537→    'report.reportData': '報告書データ',
+   538→    'report.executionDate': '実行日',
+   539→    'report.endDate': '終了日',
+   540→    'report.endDateOptional': '終了日（オプション）',
+   541→    'report.workOrder': '作業指示書',
+   542→    'report.workOrderOptional': '作業指示書（オプション）',
+   543→    'report.performers': '実行者名',
+   544→    'report.hourMeter': 'アワーメーター',
+   545→    
+   546→    // Machine Identification
+   547→    'machine.identification': '機械識別',
+   548→    'machine.equipmentPhoto': '設備写真',
+   549→    'machine.hourMeterPhoto': 'アワーメーター写真',
+   550→    'machine.serialPhoto': 'シリアル番号写真',
+   551→    'machine.localPhoto': '場所写真',
+   552→    'machine.equipmentTag': '設備TAG',
+   553→    'machine.serialNumber': 'シリアル番号',
+   554→    
+   555→    // Photo Registration
+   556→    'photos.title': '写真記録',
+   557→    'photos.photoCount': '{count}枚の写真',
+   558→    'photos.addPhoto': '写真を追加',
+   559→    'photos.photo': '写真',
+   560→    'photos.clickToAdd': 'クリックして写真を追加',
+   561→    'photos.noPhoto': '写真なし',
+   562→    
+   563→    // Photo Fields
+   564→    'photo.pn': 'PN',
+   565→    'photo.pnPlaceholder': '部品番号',
+   566→    'photo.serial': 'シリアル',
+   567→    'photo.serialPlaceholder': 'シリアル',
+   568→    'photo.partName': '部品',
+   569→    'photo.partNamePlaceholder': '部品名',
+   570→    'photo.quantity': '数量',
+   571→    'photo.quantityPlaceholder': '数量',
+   572→    'photo.criticality': '重要度',
+   573→    'photo.criticalityHigh': '高',
+   574→    'photo.criticalityMedium': '中',
+   575→    'photo.criticalityLow': '低',
+   576→    'photo.description': '説明',
+   577→    'photo.descriptionPlaceholder': '説明...',
+   578→    'photo.circles': '円',
+   579→    
+   580→    // Sub-parts
+   581→    'subparts.title': 'サブ部品',
+   582→    'subparts.partsOf': '追加部品（{pn}のサブ部品）',
+   583→    'subparts.type': 'サブ部品',
+   584→    
+   585→    // Categories
+   586→    'category.contexto': '介入コンテキスト',
+   587→    'category.contextoDesc': '症状、日付、作業指示書/コール、目的、範囲',
+   588→    'category.componente': 'コンポーネント写真',
+   589→    'category.componenteDesc': '現在の故障状態とPN',
+   590→    'category.preparacao': '部品/リソース準備',
+   591→    'category.preparacaoDesc': '写真 + 部品リスト（フィルター、リソース、作業に必要な項目）',
+   592→    'category.desmontagem': '分解',
+   593→    'category.desmontagemDesc': '遠/中/近写真 + 観察（作業の最初の部分）',
+   594→    'category.diagnostico': '診断',
+   595→    'category.diagnosticoDesc': '特定された内容、証拠、測定値',
+   596→    'category.execucao': '修理/調整/交換の実行',
+   597→    'category.execucaoDesc': '重要なステップ、トルク、パラメータ',
+   598→    'category.montagem': '組立',
+   599→    'category.montagemDesc': '設置されたコンポーネントの写真',
+   600→    'category.testes': 'テストと測定',
+   601→    'category.testesDesc': '前/後',
+   602→    
+   603→    // Parts Table
+   604→    'partsTable.title': '部品表',
+   605→    'partsTable.pnSerial': 'PN (シリアル)',
+   606→    'partsTable.partName': '部品名',
+   607→    'partsTable.qty': '数量',
+   608→    'partsTable.type': 'タイプ',
+   609→    'partsTable.criticality': '重要度',
+   610→    'partsTable.main': 'メイン',
+   611→    'partsTable.subpart': 'サブ部品',
+   612→    'partsTable.exportExcel': 'Excelエクスポート',
+   613→    
+   614→    // Conclusion
+   615→    'conclusion.title': '結論',
+   616→    'conclusion.placeholder': '報告書の結論を入力...',
+   617→    
+   618→    // Actions
+   619→    'action.clear': '報告書をクリア',
+   620→    'action.export': 'データをエクスポート',
+   621→    'action.import': 'データをインポート',
+   622→    'action.downloadPPT': 'PowerPointをダウンロード',
+   623→    'action.importExport': 'インポート / エクスポート',
+   624→    'action.importExportDesc': '報告書データを保存または読み込み:',
+   625→    'action.download': 'レポートをダウンロード',
+   626→    'action.downloadDesc': 'ダウンロード形式を選択:',
+   627→    'action.pptDesc': '画像付き完全レポート',
+   628→    'action.exportJson': 'JSONエクスポート',
+   629→    'action.exportJsonDesc': '.jsonファイルとしてデータをダウンロード',
+   630→    'action.importJson': 'JSONインポート',
+   631→    'action.importJsonDesc': '.jsonファイルからデータを読み込み',
+   632→    'action.addPhoto': '写真を追加',
+   633→    'action.translate': 'コンテンツを翻訳',
+   634→    'action.add': '追加',
+   635→    'action.remove': '削除',
+   636→    'action.edit': '編集',
+   637→    'action.save': '保存',
+   638→    'action.cancel': 'キャンセル',
+   639→    'action.confirm': '確認',
+   640→    
+   641→    // Photo Editor
+   642→    'editor.title': '写真エディタ',
+   643→    'editor.select': '選択',
+   644→    'editor.circle': '円',
+   645→    'editor.circleWithPhoto': '写真付き円',
+   646→    'editor.arrow': '矢印',
+   647→    'editor.color': '色:',
+   648→    'editor.deleteSelected': '削除キーで削除 • Escでキャンセル',
+   649→    'editor.clickToSelect': 'クリックして選択、ドラッグして移動',
+   650→    'editor.clickToAddCircle': 'クリックして円を追加',
+   651→    'editor.clickToAddPhotoCircle': 'クリックして写真付き円を追加',
+   652→    'editor.clickAndDragArrow': 'クリックしてドラッグで矢印を描画',
+   653→    'editor.addPhotoToCircle': '円に写真を追加',
+   654→    'editor.choosePhoto': '写真を選択:',
+   655→    'editor.upload': 'アップロード',
+   656→    'editor.paste': '貼り付け',
+   657→    
+   658→    // Photo Options Dialog
+   659→    'photoOptions.title': '写真オプション',
+   660→    'photoOptions.uploadFile': 'ファイルをアップロード',
+   661→    'photoOptions.openCamera': 'カメラを開く',
+   662→    'photoOptions.pasteClipboard': 'クリップボードから貼り付け',
+   663→    'photoOptions.viewFullscreen': 'フルスクリーン表示',
+   664→    'photoOptions.replacePhoto': '写真を交換',
+   665→    
+   666→    // Fullscreen Viewer
+   667→    'fullscreen.close': '閉じる',
+   668→    'fullscreen.download': 'ダウンロード',
+   669→    
+   670→    // Clear Confirm Dialog
+   671→    'clearConfirm.title': 'クリアの確認',
+   672→    'clearConfirm.description': '報告書全体をクリアしてもよろしいですか？',
+   673→    
+   674→    // Loading
+   675→    'loading.generatingPPT': 'PowerPointを生成中...',
+   676→    
+   677→    // Footer
+   678→    'footer.copyright': '© 2024 - 産業メンテナンス部 | 全著作権所有',
+   679→    
+   680→    // Placeholders
+   681→    'placeholder.tag': 'TAGを入力または選択...',
+   682→    'placeholder.modelo': 'モデルを入力',
+   683→    'placeholder.sn': 'シリアル番号を入力',
+   684→    'placeholder.entrega': '納期を入力',
+   685→    'placeholder.cliente': '顧客名を入力',
+   686→    'placeholder.descricao': '説明を入力',
+   687→    'placeholder.os': '作業指示書を入力',
+   688→    'placeholder.inspector': '検査員名を入力',
+   689→    'placeholder.hourmeter': 'アワーメーターを入力',
+   690→    
+   691→    // Select Options
+   692→    'select.no': 'いいえ',
+   693→    'select.yes': 'はい',
+   694→    'select.selectOption': '選択...',
+   695→    
+   696→    // Table
+   697→    'table.swipe': 'スワイプして詳細を見る',
+   698→    
+   699→    // Spell Check
+   700→    'spellCheck.title': 'スペルチェック',
+   701→    'spellCheck.foundErrors': '{count}件のエラーが見つかりました',
+   702→    'spellCheck.applyAll': 'すべて修正',
+   703→    'spellCheck.apply': '適用',
+   704→    'spellCheck.noErrors': 'エラーは見つかりませんでした！',
+   705→    'spellCheck.checking': '確認中...',
+   706→  },
+   707→  
+   708→  zh: {
+   709→    // Header & Sidebar
+   710→    'app.title': 'Z-Services AI',
+   711→    'tab.home': '报告',
+   712→    'tab.inspecao': '检查',
+   713→    
+   714→    // Cover Page
+   715→    'report.technicalReport': '技术报告',
+   716→    'report.executionInfo': '执行信息',
+   717→    'report.tag': 'TAG',
+   718→    'report.modelo': '型号',
+   719→    'report.sn': 'SN',
+   720→    'report.entrega': '交付',
+   721→    'report.cliente': '客户',
+   722→    'report.descricao': '描述',
+   723→    'report.machineDown': 'MACHINE DOWN?',
+   724→    'report.reportData': '报告数据',
+   725→    'report.executionDate': '执行日期',
+   726→    'report.endDate': '结束日期',
+   727→    'report.endDateOptional': '结束日期（可选）',
+   728→    'report.workOrder': '工单',
+   729→    'report.workOrderOptional': '工单（可选）',
+   730→    'report.performers': '执行者姓名',
+   731→    'report.hourMeter': '小时表',
+   732→    
+   733→    // Machine Identification
+   734→    'machine.identification': '机器识别',
+   735→    'machine.equipmentPhoto': '设备照片',
+   736→    'machine.hourMeterPhoto': '小时表照片',
+   737→    'machine.serialPhoto': '序列号照片',
+   738→    'machine.localPhoto': '地点照片',
+   739→    'machine.equipmentTag': '设备TAG',
+   740→    'machine.serialNumber': '序列号',
+   741→    
+   742→    // Photo Registration
+   743→    'photos.title': '照片记录',
+   744→    'photos.photoCount': '{count}张照片',
+   745→    'photos.addPhoto': '添加照片',
+   746→    'photos.photo': '照片',
+   747→    'photos.clickToAdd': '点击添加照片',
+   748→    'photos.noPhoto': '无照片',
+   749→    
+   750→    // Photo Fields
+   751→    'photo.pn': 'PN',
+   752→    'photo.pnPlaceholder': '零件号',
+   753→    'photo.serial': '序列号',
+   754→    'photo.serialPlaceholder': '序列号',
+   755→    'photo.partName': '零件',
+   756→    'photo.partNamePlaceholder': '零件名称',
+   757→    'photo.quantity': '数量',
+   758→    'photo.quantityPlaceholder': '数量',
+   759→    'photo.criticality': '重要性',
+   760→    'photo.criticalityHigh': '高',
+   761→    'photo.criticalityMedium': '中',
+   762→    'photo.criticalityLow': '低',
+   763→    'photo.description': '描述',
+   764→    'photo.descriptionPlaceholder': '描述...',
+   765→    'photo.circles': '圆圈',
+   766→    
+   767→    // Sub-parts
+   768→    'subparts.title': '子零件',
+   769→    'subparts.partsOf': '附加零件（{pn}的子零件）',
+   770→    'subparts.type': '子零件',
+   771→    
+   772→    // Categories
+   773→    'category.contexto': '干预背景',
+   774→    'category.contextoDesc': '症状、日期、工单/呼叫、目标、范围',
+   775→    'category.componente': '组件照片',
+   776→    'category.componenteDesc': '当前故障状态与PN',
+   777→    'category.preparacao': '零件/资源准备',
+   778→    'category.preparacaoDesc': '照片 + 零件清单（过滤器、资源、活动所需物品）',
+   779→    'category.desmontagem': '拆卸',
+   780→    'category.desmontagemDesc': '远/中/近照片 + 观察（活动第一部分）',
+   781→    'category.diagnostico': '诊断',
+   782→    'category.diagnosticoDesc': '识别内容、证据、测量值',
+   783→    'category.execucao': '维修/调整/更换执行',
+   784→    'category.execucaoDesc': '关键步骤、扭矩、参数',
+   785→    'category.montagem': '组装',
+   786→    'category.montagemDesc': '已安装组件照片',
+   787→    'category.testes': '测试和测量',
+   788→    'category.testesDesc': '之前/之后',
+   789→    
+   790→    // Parts Table
+   791→    'partsTable.title': '零件表',
+   792→    'partsTable.pnSerial': 'PN（序列号）',
+   793→    'partsTable.partName': '零件名称',
+   794→    'partsTable.qty': '数量',
+   795→    'partsTable.type': '类型',
+   796→    'partsTable.criticality': '重要性',
+   797→    'partsTable.main': '主要',
+   798→    'partsTable.subpart': '子零件',
+   799→    'partsTable.exportExcel': '导出Excel',
+   800→    
+   801→    // Conclusion
+   802→    'conclusion.title': '结论',
+   803→    'conclusion.placeholder': '输入报告结论...',
+   804→    
+   805→    // Actions
+   806→    'action.clear': '清除报告',
+   807→    'action.export': '导出数据',
+   808→    'action.import': '导入数据',
+   809→    'action.downloadPPT': '下载PowerPoint',
+   810→    'action.importExport': '导入 / 导出',
+   811→    'action.importExportDesc': '保存或加载报告数据:',
+   812→    'action.download': '下载报告',
+   813→    'action.downloadDesc': '选择下载格式:',
+   814→    'action.pptDesc': '包含图片的完整报告',
+   815→    'action.exportJson': '导出JSON',
+   816→    'action.exportJsonDesc': '下载数据为.json文件',
+   817→    'action.importJson': '导入JSON',
+   818→    'action.importJsonDesc': '从.json文件加载数据',
+   819→    'action.addPhoto': '添加照片',
+   820→    'action.translate': '翻译内容',
+   821→    'action.add': '添加',
+   822→    'action.remove': '删除',
+   823→    'action.edit': '编辑',
+   824→    'action.save': '保存',
+   825→    'action.cancel': '取消',
+   826→    'action.confirm': '确认',
+   827→    
+   828→    // Photo Editor
+   829→    'editor.title': '照片编辑器',
+   830→    'editor.select': '选择',
+   831→    'editor.circle': '圆圈',
+   832→    'editor.circleWithPhoto': '带照片圆圈',
+   833→    'editor.arrow': '箭头',
+   834→    'editor.color': '颜色:',
+   835→    'editor.deleteSelected': 'Delete删除 • Esc取消',
+   836→    'editor.clickToSelect': '点击选择，拖动移动',
+   837→    'editor.clickToAddCircle': '点击添加圆圈',
+   838→    'editor.clickToAddPhotoCircle': '点击添加带照片圆圈',
+   839→    'editor.clickAndDragArrow': '点击拖动绘制箭头',
+   840→    'editor.addPhotoToCircle': '添加照片到圆圈',
+   841→    'editor.choosePhoto': '选择照片:',
+   842→    'editor.upload': '上传',
+   843→    'editor.paste': '粘贴',
+   844→    
+   845→    // Photo Options Dialog
+   846→    'photoOptions.title': '照片选项',
+   847→    'photoOptions.uploadFile': '文件上传',
+   848→    'photoOptions.openCamera': '打开相机',
+   849→    'photoOptions.pasteClipboard': '从剪贴板粘贴',
+   850→    'photoOptions.viewFullscreen': '全屏查看',
+   851→    'photoOptions.replacePhoto': '更换照片',
+   852→    
+   853→    // Fullscreen Viewer
+   854→    'fullscreen.close': '关闭',
+   855→    'fullscreen.download': '下载',
+   856→    
+   857→    // Clear Confirm Dialog
+   858→    
+   859→    // Clear Confirm Dialog
+   860→    'clearConfirm.title': '确认清除',
+   861→    'clearConfirm.description': '确定要清除整个报告吗？',
+   862→    
+   863→    // Loading
+   864→    'loading.generatingPPT': '正在生成PowerPoint...',
+   865→    
+   866→    // Footer
+   867→    'footer.copyright': '© 2024 - 工业维护部门 | 版权所有',
+   868→    
+   869→    // Placeholders
+   870→    'placeholder.tag': '输入或选择TAG...',
+   871→    'placeholder.modelo': '输入型号',
+   872→    'placeholder.sn': '输入序列号',
+   873→    'placeholder.entrega': '输入交付日期',
+   874→    'placeholder.cliente': '输入客户名称',
+   875→    'placeholder.descricao': '输入描述',
+   876→    'placeholder.os': '输入工单',
+   877→    'placeholder.inspector': '输入检查员姓名',
+   878→    'placeholder.hourmeter': '输入小时表',
+   879→    
+   880→    // Select Options
+   881→    'select.no': '否',
+   882→    'select.yes': '是',
+   883→    'select.selectOption': '选择...',
+   884→    
+   885→    // Table
+   886→    'table.swipe': '滑动查看更多',
+   887→    
+   888→    // Spell Check
+   889→    'spellCheck.title': '拼写检查',
+   890→    'spellCheck.foundErrors': '发现 {count} 个错误',
+   891→    'spellCheck.applyAll': '全部修正',
+   892→    'spellCheck.apply': '应用',
+   893→    'spellCheck.noErrors': '未发现错误！',
+   894→    'spellCheck.checking': '检查中...',
+   895→  },
+   896→};
+   897→
+   898→// Get translation for a key
+   899→export function t(key: string, lang: Language, params?: Record<string, string | number>): string {
+   900→  // First try to get translation from current language
+   901→  let text = translations[lang]?.[key];
+   902→  
+   903→  // If not found, try Portuguese as fallback
+   904→  if (!text) {
+   905→    text = translations['pt'][key];
+   906→  }
+   907→  
+   908→  // If still not found, use defaultValue or the key itself
+   909→  if (!text) {
+   910→    text = (params?.defaultValue as string) || key;
+   911→  }
+   912→  
+   913→  // Replace any parameters in the text
+   914→  if (params) {
+   915→    Object.entries(params).forEach(([paramKey, value]) => {
+   916→      if (paramKey !== 'defaultValue') {
+   917→        text = text.replace(`{${paramKey}}`, String(value));
+   918→      }
+   919→    });
+   920→  }
+   921→  
+   922→  return text;
+   923→}
+   924→
+   925→// Translate dynamic text using AI
+   926→export async function translateText(text: string, targetLang: Language, sourceLang: Language = 'pt'): Promise<string> {
+   927→  if (!text || text.trim() === '') return text;
+   928→  if (sourceLang === targetLang) return text;
+   929→  
+   930→  const langNames: Record<Language, string> = {
+   931→    pt: 'Portuguese',
+   932→    en: 'English',
+   933→    ja: 'Japanese',
+   934→    zh: 'Chinese (Mandarin)',
+   935→  };
+   936→  
+   937→  try {
+   938→    const response = await fetch('/api/translate', {
+   939→      method: 'POST',
+   940→      headers: { 'Content-Type': 'application/json' },
+   941→      body: JSON.stringify({
+   942→        text,
+   943→        sourceLang,
+   944→        targetLang,
+   945→        sourceLangName: langNames[sourceLang],
+   946→        targetLangName: langNames[targetLang],
+   947→      }),
+   948→    });
+   949→    
+   950→    const data = await response.json();
+   951→    return data.translation || text;
+   952→  } catch (error) {
+   953→    console.error('Translation error:', error);
+   954→    return text;
+   955→  }
+   956→}
+   957→
+   958→// Batch translate multiple texts
+   959→export async function translateBatch(
+   960→  texts: string[],
+   961→  targetLang: Language,
+   962→  sourceLang: Language = 'pt'
+   963→): Promise<string[]> {
+   964→  if (sourceLang === targetLang) return texts;
+   965→  
+   966→  const langNames: Record<Language, string> = {
+   967→    pt: 'Portuguese',
+   968→    en: 'English',
+   969→    ja: 'Japanese',
+   970→    zh: 'Chinese (Mandarin)',
+   971→  };
+   972→  
+   973→  try {
+   974→    const response = await fetch('/api/translate', {
+   975→      method: 'POST',
+   976→      headers: { 'Content-Type': 'application/json' },
+   977→      body: JSON.stringify({
+   978→        texts,
+   979→        sourceLang,
+   980→        targetLang,
+   981→        sourceLangName: langNames[sourceLang],
+   982→        targetLangName: langNames[targetLang],
+   983→        batch: true,
+   984→      }),
+   985→    });
+   986→    
+   987→    const data = await response.json();
+   988→    return data.translations || texts;
+   989→  } catch (error) {
+   990→    console.error('Batch translation error:', error);
+   991→    return texts;
+   992→  }
+   993→}
+   994→

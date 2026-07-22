@@ -1,0 +1,2002 @@
+   398→  const handleAddPart = () => {
+   399→    if (!newPn.trim() || !newPartName.trim() || !newQuantity.trim()) return;
+   400→    
+   401→    onAddPart({
+   402→      id: `add-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+   403→      pn: newPn.trim(),
+   404→      serialNumber: newSerialNumber.trim(),
+   405→      partName: newPartName.trim(),
+   406→      quantity: newQuantity.trim(),
+   407→      criticality: newCriticality,
+   408→      parentPn: parentPn,
+   409→    });
+   410→
+   411→    setNewPn('');
+   412→    setNewSerialNumber('');
+   413→    setNewPartName('');
+   414→    setNewQuantity('');
+   415→    setNewCriticality('');
+   416→  };
+   417→
+   418→  // Processar dados do Excel colados
+   419→  const handlePasteExcel = () => {
+   420→    if (!excelPasteData.trim()) return;
+   421→    
+   422→    // Parse dos dados - formato: Part No.      Q'ty    Part name (tab ou espaços)
+   423→    const lines = excelPasteData.trim().split('\n');
+   424→    
+   425→    lines.forEach((line) => {
+   426→      // Divide por tab ou múltiplos espaços
+   427→      const parts = line.split(/\t+|\s{2,}/).map(p => p.trim()).filter(p => p);
+   428→      
+   429→      if (parts.length >= 3) {
+   430→        const pn = parts[0];
+   431→        const quantity = parts[1];
+   432→        const partName = parts.slice(2).join(' '); // Nome pode ter espaços
+   433→        
+   434→        onAddPart({
+   435→          id: `add-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+   436→          pn: pn,
+   437→          serialNumber: '',
+   438→          partName: partName,
+   439→          quantity: quantity,
+   440→          criticality: '',
+   441→          parentPn: parentPn,
+   442→        });
+   443→      }
+   444→    });
+   445→    
+   446→    setExcelPasteData('');
+   447→    setShowExcelPaste(false);
+   448→  };
+   449→
+   450→  // Get badge color based on criticality
+   451→  const getCriticalityBadge = (criticality: string) => {
+   452→    switch (criticality) {
+   453→      case 'Alta':
+   454→        return <Badge className="bg-red-500 text-white text-xs h-5 px-2">{t('photo.criticalityHigh')}</Badge>;
+   455→      case 'Média':
+   456→        return <Badge className="bg-yellow-500 text-white text-xs h-5 px-2">{t('photo.criticalityMedium')}</Badge>;
+   457→      case 'Baixa':
+   458→        return <Badge className="bg-green-500 text-white text-xs h-5 px-2">{t('photo.criticalityLow')}</Badge>;
+   459→      default:
+   460→        return null;
+   461→    }
+   462→  };
+   463→
+   464→  return (
+   465→    <div className="mt-3 p-3 bg-orange-50 rounded-lg border-2 border-orange-400 space-y-2">
+   466→      <div className="flex items-center justify-between">
+   467→        <Label className="text-sm text-orange-800 font-bold flex items-center gap-2">
+   468→          <ListTree className="h-4 w-4" />
+   469→          {t('subparts.partsOf', { pn: parentPn || '...' })}
+   470→        </Label>
+   471→        <Button
+   472→          variant="ghost"
+   473→          size="sm"
+   474→          className="h-7 text-xs text-orange-600 hover:text-orange-800"
+   475→          onClick={() => setShowExcelPaste(!showExcelPaste)}
+   476→        >
+   477→          {showExcelPaste ? 'Manual' : 'Colar Excel'}
+   478→        </Button>
+   479→      </div>
+   480→      
+   481→      {/* Excel Paste Mode */}
+   482→      {showExcelPaste && (
+   483→        <div className="space-y-2">
+   484→          <p className="text-xs text-orange-700">
+   485→            Cole os dados do Excel no formato: Part No. | Q'ty | Part name (uma linha por peça)
+   486→          </p>
+   487→          <Textarea
+   488→            className="min-h-[80px] text-sm"
+   489→            placeholder="4244836&#9;4&#9;BUCHA&#10;4244837&#9;2&#9;ANEL"
+   490→            value={excelPasteData}
+   491→            onChange={(e) => setExcelPasteData(e.target.value)}
+   492→          />
+   493→          <div className="flex gap-2">
+   494→            <Button
+   495→              size="sm"
+   496→              className="bg-orange-500 hover:bg-orange-600"
+   497→              onClick={handlePasteExcel}
+   498→              disabled={!excelPasteData.trim()}
+   499→            >
+   500→              <Plus className="h-4 w-4 mr-1" /> Adicionar
+   501→            </Button>
+   502→            <Button
+   503→              variant="outline"
+   504→              size="sm"
+   505→              onClick={() => { setExcelPasteData(''); setShowExcelPaste(false); }}
+   506→            >
+   507→              Cancelar
+   508→            </Button>
+   509→          </div>
+   510→        </div>
+   511→      )}
+   512→      
+   513→      {/* Manual Mode */}
+   514→      {!showExcelPaste && (
+   515→        <>
+   516→      
+   517→      {photoAdditionalParts.length > 0 && (
+   518→        <div className="space-y-1 max-h-32 overflow-y-auto">
+   519→          {photoAdditionalParts.map((part) => (
+   520→            <div key={part.id} className="flex items-center gap-2 bg-white p-2 rounded border text-sm">
+   521→              <span className="text-orange-600 font-mono font-bold">└─</span>
+   522→              <span className="font-semibold text-gray-700">{part.pn}</span>
+   523→              {part.serialNumber && (
+   524→                <span className="text-gray-500">({part.serialNumber})</span>
+   525→              )}
+   526→              <span className="text-gray-600 flex-1 truncate">{part.partName}</span>
+   527→              <Badge variant="secondary" className="text-xs h-5 px-2">{t('photo.quantity')}: {part.quantity}</Badge>
+   528→              {getCriticalityBadge(part.criticality)}
+   529→              <Button variant="ghost" size="icon" className="h-8 w-8 text-red-500 hover:text-red-700 min-h-[44px] min-w-[44px] md:min-h-0 md:min-w-0" onClick={() => onRemovePart(part.id)}>
+   530→                <X className="h-4 w-4" />
+   531→              </Button>
+   532→            </div>
+   533→          ))}
+   534→        </div>
+   535→      )}
+   536→
+   537→      {/* Mobile layout - stacked */}
+   538→      <div className="md:hidden space-y-2">
+   539→        <div className="grid grid-cols-2 gap-2">
+   540→          <Input className="h-11 text-base" placeholder="PN" value={newPn} onChange={(e) => setNewPn(e.target.value)} />
+   541→          <Input className="h-11 text-base" placeholder={t('photo.serialPlaceholder')} value={newSerialNumber} onChange={(e) => setNewSerialNumber(e.target.value)} />
+   542→        </div>
+   543→        <Input className="h-11 text-base" placeholder={t('photo.partNamePlaceholder')} value={newPartName} onChange={(e) => setNewPartName(e.target.value)} />
+   544→        <div className="grid grid-cols-2 gap-2">
+   545→          <Input className="h-11 text-base" placeholder={t('photo.quantityPlaceholder')} type="number" value={newQuantity} onChange={(e) => setNewQuantity(e.target.value)} />
+   546→          <Select value={newCriticality} onValueChange={(v) => setNewCriticality(v as 'Alta' | 'Média' | 'Baixa' | '')}>
+   547→            <SelectTrigger className="h-11 text-base">
+   548→              <SelectValue placeholder={t('photo.criticality')} />
+   549→            </SelectTrigger>
+   550→            <SelectContent>
+   551→              <SelectItem value="Alta">{t('photo.criticalityHigh')}</SelectItem>
+   552→              <SelectItem value="Média">{t('photo.criticalityMedium')}</SelectItem>
+   553→              <SelectItem value="Baixa">{t('photo.criticalityLow')}</SelectItem>
+   554→            </SelectContent>
+   555→          </Select>
+   556→        </div>
+   557→        <Button size="lg" className="w-full h-12 bg-orange-500 hover:bg-orange-600" onClick={handleAddPart} disabled={!newPn.trim() || !newPartName.trim() || !newQuantity.trim()}>
+   558→          <Plus className="h-5 w-5 mr-2" /> {t('action.add')}
+   559→        </Button>
+   560→      </div>
+   561→
+   562→      {/* Desktop layout - inline grid */}
+   563→      <div className="hidden md:grid grid-cols-12 gap-2">
+   564→        <Input className="h-8 text-sm col-span-2" placeholder="PN" value={newPn} onChange={(e) => setNewPn(e.target.value)} />
+   565→        <Input className="h-8 text-sm col-span-2" placeholder={t('photo.serialPlaceholder')} value={newSerialNumber} onChange={(e) => setNewSerialNumber(e.target.value)} />
+   566→        <Input className="h-8 text-sm col-span-2" placeholder={t('photo.partNamePlaceholder')} value={newPartName} onChange={(e) => setNewPartName(e.target.value)} />
+   567→        <Input className="h-8 text-sm col-span-2" placeholder={t('photo.quantityPlaceholder')} type="number" value={newQuantity} onChange={(e) => setNewQuantity(e.target.value)} />
+   568→        <Select value={newCriticality} onValueChange={(v) => setNewCriticality(v as 'Alta' | 'Média' | 'Baixa' | '')}>
+   569→          <SelectTrigger className="h-8 text-xs col-span-2">
+   570→            <SelectValue placeholder={t('photo.criticality')} />
+   571→          </SelectTrigger>
+   572→          <SelectContent>
+   573→            <SelectItem value="Alta">{t('photo.criticalityHigh')}</SelectItem>
+   574→            <SelectItem value="Média">{t('photo.criticalityMedium')}</SelectItem>
+   575→            <SelectItem value="Baixa">{t('photo.criticalityLow')}</SelectItem>
+   576→          </SelectContent>
+   577→        </Select>
+   578→        <Button size="icon" className="h-8 w-8 bg-orange-500 hover:bg-orange-600 col-span-2" onClick={handleAddPart} disabled={!newPn.trim() || !newPartName.trim() || !newQuantity.trim()}>
+   579→          <Plus className="h-4 w-4" />
+   580→        </Button>
+   581→      </div>
+   582→        </>
+   583→      )}
+   584→    </div>
+   585→  );
+   586→}
+   587→
+   588→// Tipo para modo de edição de foto
+   589→type PhotoEditMode = 'primary' | 'secondary' | 'dual';
+   590→
+   591→// Editor de Foto
+   592→function PhotoEditor({
+   593→  photo,
+   594→  editMode = 'primary',
+   595→  onSave,
+   596→  onClose,
+   597→  t,
+   598→}: {
+   599→  photo: PhotoData;
+   600→  editMode?: PhotoEditMode;
+   601→  onSave: (data: Partial<PhotoData>) => void;
+   602→  onClose: () => void;
+   603→  t: (key: string, params?: Record<string, string | number>) => string;
+   604→}) {
+   605→  const canvasRef = useRef<HTMLCanvasElement>(null);
+   606→  const containerRef = useRef<HTMLDivElement>(null);
+   607→  const imgRef = useRef<HTMLImageElement | null>(null);
+   608→  
+   609→  const [objects, setObjects] = useState<EditorCircle[]>(() => {
+   610→    return (photo.embeddedPhotos || []).map(ep => ({
+   611→      id: ep.id,
+   612→      type: 'circleWithPhoto' as const,
+   613→      x: ep.circleX,
+   614→      y: ep.circleY,
+   615→      radius: ep.circleRadius,
+   616→      color: '#f97316',
+   617→      imageData: ep.imageData,
+   618→    }));
+   619→  });
+   620→  
+   621→  const [currentTool, setCurrentTool] = useState<'select' | 'circle' | 'circlePhoto' | 'arrow' | 'rectangle'>('select');
+   622→  const [selectedObjectId, setSelectedObjectId] = useState<string | null>(null);
+   623→  const [isDragging, setIsDragging] = useState(false);
+   624→  const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
+   625→  const [currentColor, setCurrentColor] = useState('#f97316');
+   626→  const [circleRadius, setCircleRadius] = useState(80);
+   627→  const [showAddPhotoDialog, setShowAddPhotoDialog] = useState(false);
+   628→  const [pendingPhotoCircle, setPendingPhotoCircle] = useState<EditorCircle | null>(null);
+   629→  const [isDrawingArrow, setIsDrawingArrow] = useState(false);
+   630→  const [arrowStart, setArrowStart] = useState<{ x: number; y: number } | null>(null);
+   631→  const [arrowPreview, setArrowPreview] = useState<{ x: number; y: number } | null>(null);
+   632→  const [isDrawingCircle, setIsDrawingCircle] = useState(false);
+   633→  const [circleStart, setCircleStart] = useState<{ x: number; y: number } | null>(null);
+   634→  const [circlePreview, setCirclePreview] = useState<{ x: number; y: number; radius: number } | null>(null);
+   635→  const [isDrawingRect, setIsDrawingRect] = useState(false);
+   636→  const [rectStart, setRectStart] = useState<{ x: number; y: number } | null>(null);
+   637→  const [rectPreview, setRectPreview] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
+   638→  const [rotation, setRotation] = useState(0);
+   639→
+   640→  // Determinar qual imagem editar baseado no modo
+   641→  const getActiveImageSrc = () => {
+   642→    if (editMode === 'secondary') {
+   643→      return photo.secondaryImageData;
+   644→    }
+   645→    if (editMode === 'dual' && photo.imageData && photo.secondaryImageData) {
+   646→      // Criar imagem combinada lado a lado
+   647→      return null; // Será tratado separadamente
+   648→    }
+   649→    return photo.editedImageData || photo.imageData;
+   650→  };
+   651→  
+   652→  const imageSrc = getActiveImageSrc();
+   653→  const [dualCanvasSize, setDualCanvasSize] = useState<{ width: number; height: number } | null>(null);
+   654→  const [canvasSize, setCanvasSize] = useState({ width: 0, height: 0, scale: 1 });
+   655→
+   656→  useEffect(() => {
+   657→    const container = containerRef.current;
+   658→    if (!container) return;
+   659→    const containerWidth = Math.min(container.clientWidth - 32, 900);
+   660→    const containerHeight = 500;
+   661→
+   662→    // Modo duplo: carregar ambas as imagens lado a lado
+   663→    if (editMode === 'dual' && photo.imageData && photo.secondaryImageData) {
+   664→      const img1 = new window.Image();
+   665→      const img2 = new window.Image();
+   666→      
+   667→      let loaded = 0;
+   668→      const checkLoaded = () => {
+   669→        loaded++;
+   670→        if (loaded === 2) {
+   671→          // Calcular dimensões para ambas as imagens lado a lado
+   672→          const halfWidth = containerWidth / 2 - 10;
+   673→          const scale1 = Math.min(halfWidth / img1.width, containerHeight / img1.height);
+   674→          const scale2 = Math.min(halfWidth / img2.width, containerHeight / img2.height);
+   675→          const scale = Math.min(scale1, scale2);
+   676→          
+   677→          const totalWidth = (img1.width + img2.width) * scale + 10;
+   678→          const totalHeight = Math.max(img1.height, img2.height) * scale;
+   679→          
+   680→          setCanvasSize({ width: totalWidth, height: totalHeight, scale });
+   681→          setDualCanvasSize({ width: img1.width * scale, height: img1.height * scale });
+   682→          
+   683→          // Criar imagem combinada temporária
+   684→          const tempCanvas = document.createElement('canvas');
+   685→          tempCanvas.width = img1.width + img2.width;
+   686→          tempCanvas.height = Math.max(img1.height, img2.height);
+   687→          const ctx = tempCanvas.getContext('2d');
+   688→          if (ctx) {
+   689→            ctx.drawImage(img1, 0, 0);
+   690→            ctx.drawImage(img2, img1.width, 0);
+   691→          }
+   692→          
+   693→          const combinedImg = new window.Image();
+   694→          combinedImg.onload = () => {
+   695→            imgRef.current = combinedImg;
+   696→          };
+   697→          combinedImg.src = tempCanvas.toDataURL('image/png');
+   698→        }
+   699→      };
+   700→      
+   701→      img1.onload = checkLoaded;
+   702→      img2.onload = checkLoaded;
+   703→      img1.src = photo.imageData;
+   704→      img2.src = photo.secondaryImageData;
+   705→      return;
+   706→    }
+   707→
+   708→    // Modo normal (primário ou secundário)
+   709→    if (!imageSrc) return;
+   710→    const img = new window.Image();
+   711→    img.onload = () => {
+   712→      imgRef.current = img;
+   713→      let imgWidth = img.width;
+   714→      let imgHeight = img.height;
+   715→      // Swap dimensions for 90/270 degree rotation
+   716→      if (rotation === 90 || rotation === 270) {
+   717→        [imgWidth, imgHeight] = [imgHeight, imgWidth];
+   718→      }
+   719→      const scale = Math.min(containerWidth / imgWidth, containerHeight / imgHeight);
+   720→      setCanvasSize({ width: imgWidth * scale, height: imgHeight * scale, scale });
+   721→    };
+   722→    img.src = imageSrc;
+   723→  }, [imageSrc, editMode, photo.imageData, photo.secondaryImageData, rotation]);
+   724→
+   725→  const drawCanvas = useCallback(() => {
+   726→    const canvas = canvasRef.current;
+   727→    const img = imgRef.current;
+   728→    if (!canvas || !img || !imageSrc) return;
+   729→
+   730→    const ctx = canvas.getContext('2d');
+   731→    if (!ctx) return;
+   732→
+   733→    const { width, height, scale } = canvasSize;
+   734→    canvas.width = width;
+   735→    canvas.height = height;
+   736→    ctx.save();
+   737→    if (rotation > 0) {
+   738→      ctx.translate(width / 2, height / 2);
+   739→      ctx.rotate((rotation * Math.PI) / 180);
+   740→      ctx.translate(-width / 2, -height / 2);
+   741→    }
+   742→    ctx.drawImage(img, 0, 0, width, height);
+   743→    ctx.restore();
+   744→
+   745→    objects.forEach((obj) => {
+   746→      const isSelected = obj.id === selectedObjectId;
+   747→      
+   748→      if (obj.type === 'circle' || obj.type === 'circleWithPhoto') {
+   749→        const x = obj.x * scale;
+   750→        const y = obj.y * scale;
+   751→        const radius = (obj.radius || 50) * scale;
+   752→
+   753→        if (obj.type === 'circleWithPhoto' && obj.imageData) {
+   754→          const embeddedImg = new window.Image();
+   755→          embeddedImg.onload = () => {
+   756→            ctx.save();
+   757→            ctx.beginPath();
+   758→            ctx.arc(x, y, radius - 2, 0, Math.PI * 2);
+   759→            ctx.closePath();
+   760→            ctx.clip();
+   761→            ctx.drawImage(embeddedImg, x - radius + 2, y - radius + 2, (radius - 2) * 2, (radius - 2) * 2);
+   762→            ctx.restore();
+   763→            ctx.beginPath();
+   764→            ctx.arc(x, y, radius, 0, Math.PI * 2);
+   765→            ctx.strokeStyle = obj.color;
+   766→            ctx.lineWidth = isSelected ? 4 : 3;
+   767→            ctx.stroke();
+   768→          };
+   769→          embeddedImg.src = obj.imageData;
+   770→        } else {
+   771→          ctx.beginPath();
+   772→          ctx.arc(x, y, radius, 0, Math.PI * 2);
+   773→          ctx.strokeStyle = obj.color;
+   774→          ctx.lineWidth = isSelected ? 4 : 3;
+   775→          ctx.stroke();
+   776→        }
+   777→      }
+   778→      
+   779→      if (obj.type === 'arrow') {
+   780→        const startX = obj.x * scale;
+   781→        const startY = obj.y * scale;
+   782→        const endX = (obj.endX || obj.x + 50) * scale;
+   783→        const endY = (obj.endY || obj.y + 50) * scale;
+   784→
+   785→        ctx.beginPath();
+   786→        ctx.moveTo(startX, startY);
+   787→        ctx.lineTo(endX, endY);
+   788→        ctx.strokeStyle = obj.color;
+   789→        ctx.lineWidth = isSelected ? 4 : 3;
+   790→        ctx.stroke();
+   791→
+   792→        const angle = Math.atan2(endY - startY, endX - startX);
+   793→        ctx.beginPath();
+   794→        ctx.moveTo(endX, endY);
+   795→        ctx.lineTo(endX - 15 * Math.cos(angle - Math.PI / 6), endY - 15 * Math.sin(angle - Math.PI / 6));
+   796→        ctx.moveTo(endX, endY);
+   797→        ctx.lineTo(endX - 15 * Math.cos(angle + Math.PI / 6), endY - 15 * Math.sin(angle + Math.PI / 6));
+   798→        ctx.stroke();
+   799→      }
+   800→    });
+   801→
+   802→    // Rectangle objects
+   803→    objects.forEach((obj) => {
+   804→      if (obj.type === 'rectangle') {
+   805→        const isSelected = obj.id === selectedObjectId;
+   806→        const rx = obj.x * scale;
+   807→        const ry = obj.y * scale;
+   808→        const rw = (obj.width || 100) * scale;
+   809→        const rh = (obj.height || 80) * scale;
+   810→        ctx.strokeStyle = obj.color;
+   811→        ctx.lineWidth = isSelected ? 4 : 3;
+   812→        ctx.strokeRect(rx, ry, rw, rh);
+   813→      }
+   814→    });
+   815→
+   816→    if (isDrawingArrow && arrowStart && arrowPreview) {
+   817→      ctx.beginPath();
+   818→      ctx.moveTo(arrowStart.x * scale, arrowStart.y * scale);
+   819→      ctx.lineTo(arrowPreview.x * scale, arrowPreview.y * scale);
+   820→      ctx.strokeStyle = currentColor;
+   821→      ctx.lineWidth = 3;
+   822→      ctx.setLineDash([5, 5]);
+   823→      ctx.stroke();
+   824→      ctx.setLineDash([]);
+   825→    }
+   826→
+   827→    // Circle drag preview
+   828→    if (isDrawingCircle && circleStart && circlePreview) {
+   829→      ctx.beginPath();
+   830→      ctx.arc(circlePreview.x * scale, circlePreview.y * scale, circlePreview.radius * scale, 0, Math.PI * 2);
+   831→      ctx.strokeStyle = currentColor;
+   832→      ctx.lineWidth = 3;
+   833→      ctx.setLineDash([5, 5]);
+   834→      ctx.stroke();
+   835→      ctx.setLineDash([]);
+   836→    }
+   837→
+   838→    // Rectangle drag preview
+   839→    if (isDrawingRect && rectStart && rectPreview) {
+   840→      ctx.strokeStyle = currentColor;
+   841→      ctx.lineWidth = 3;
+   842→      ctx.setLineDash([5, 5]);
+   843→      ctx.strokeRect(rectPreview.x * scale, rectPreview.y * scale, rectPreview.w * scale, rectPreview.h * scale);
+   844→      ctx.setLineDash([]);
+   845→    }
+   846→  }, [imageSrc, canvasSize, objects, selectedObjectId, isDrawingArrow, arrowStart, arrowPreview, currentColor, rotation, isDrawingCircle, circleStart, circlePreview, isDrawingRect, rectStart, rectPreview]);
+   847→
+   848→  useEffect(() => {
+   849→    drawCanvas();
+   850→  }, [drawCanvas]);
+   851→
+   852→  const getMousePos = (e: React.MouseEvent): { x: number; y: number } => {
+   853→    const canvas = canvasRef.current;
+   854→    if (!canvas) return { x: 0, y: 0 };
+   855→    const rect = canvas.getBoundingClientRect();
+   856→    return { x: (e.clientX - rect.left) / canvasSize.scale, y: (e.clientY - rect.top) / canvasSize.scale };
+   857→  };
+   858→
+   859→  // Touch position helper for mobile
+   860→  const getTouchPos = (e: React.TouchEvent): { x: number; y: number } => {
+   861→    const canvas = canvasRef.current;
+   862→    if (!canvas || e.touches.length === 0) return { x: 0, y: 0 };
+   863→    const rect = canvas.getBoundingClientRect();
+   864→    const touch = e.touches[0];
+   865→    return { x: (touch.clientX - rect.left) / canvasSize.scale, y: (touch.clientY - rect.top) / canvasSize.scale };
+   866→  };
+   867→
+   868→  const findObjectAtPosition = (x: number, y: number): EditorCircle | null => {
+   869→    for (let i = objects.length - 1; i >= 0; i--) {
+   870→      const obj = objects[i];
+   871→      if (obj.type === 'circle' || obj.type === 'circleWithPhoto') {
+   872→        const dist = Math.sqrt((x - obj.x) ** 2 + (y - obj.y) ** 2);
+   873→        if (dist <= (obj.radius || 50)) return obj;
+   874→      }
+   875→      if (obj.type === 'arrow') {
+   876→        const lineLength = Math.sqrt((obj.endX! - obj.x) ** 2 + (obj.endY! - obj.y) ** 2);
+   877→        const d1 = Math.sqrt((x - obj.x) ** 2 + (y - obj.y) ** 2);
+   878→        const d2 = Math.sqrt((x - obj.endX!) ** 2 + (y - obj.endY!) ** 2);
+   879→        if (d1 + d2 <= lineLength + 15) return obj;
+   880→      }
+   881→      if (obj.type === 'rectangle') {
+   882→        const rx = Math.min(obj.x, obj.x + (obj.width || 100));
+   883→        const ry = Math.min(obj.y, obj.y + (obj.height || 80));
+   884→        const rw = Math.abs(obj.width || 100);
+   885→        const rh = Math.abs(obj.height || 80);
+   886→        if (x >= rx - 10 && x <= rx + rw + 10 && y >= ry - 10 && y <= ry + rh + 10) return obj;
+   887→      }
+   888→    }
+   889→    return null;
+   890→  };
+   891→
+   892→  const handleMouseDown = (e: React.MouseEvent) => {
+   893→    const pos = getMousePos(e);
+   894→    if (currentTool === 'select') {
+   895→      const obj = findObjectAtPosition(pos.x, pos.y);
+   896→      if (obj) {
+   897→        setSelectedObjectId(obj.id);
+   898→        setIsDragging(true);
+   899→        setDragOffset({ x: pos.x - obj.x, y: pos.y - obj.y });
+   900→      } else {
+   901→        setSelectedObjectId(null);
+   902→      }
+   903→    } else if (currentTool === 'circle') {
+   904→      setIsDrawingCircle(true);
+   905→      setCircleStart(pos);
+   906→      setCirclePreview({ x: pos.x, y: pos.y, radius: 5 });
+   907→    } else if (currentTool === 'circlePhoto') {
+   908→      setPendingPhotoCircle({ id: `cp-${Date.now()}`, type: 'circleWithPhoto', x: pos.x, y: pos.y, radius: circleRadius, color: currentColor });
+   909→      setShowAddPhotoDialog(true);
+   910→    } else if (currentTool === 'arrow') {
+   911→      setIsDrawingArrow(true);
+   912→      setArrowStart(pos);
+   913→      setArrowPreview(pos);
+   914→    } else if (currentTool === 'rectangle') {
+   915→      setIsDrawingRect(true);
+   916→      setRectStart(pos);
+   917→      setRectPreview({ x: pos.x, y: pos.y, w: 1, h: 1 });
+   918→    }
+   919→  };
+   920→
+   921→  const handleMouseMove = (e: React.MouseEvent) => {
+   922→    const pos = getMousePos(e);
+   923→    if (isDragging && selectedObjectId) {
+   924→      setObjects(prev => prev.map(obj => {
+   925→        if (obj.id !== selectedObjectId) return obj;
+   926→        const newX = pos.x - dragOffset.x;
+   927→        const newY = pos.y - dragOffset.y;
+   928→        if (obj.type === 'arrow') {
+   929→          const dx = obj.endX! - obj.x;
+   930→          const dy = obj.endY! - obj.y;
+   931→          return { ...obj, x: newX, y: newY, endX: newX + dx, endY: newY + dy };
+   932→        }
+   933→        if (obj.type === 'rectangle') {
+   934→          return { ...obj, x: newX, y: newY };
+   935→        }
+   936→        return { ...obj, x: newX, y: newY };
+   937→      }));
+   938→    }
+   939→    if (isDrawingArrow) setArrowPreview(pos);
+   940→    if (isDrawingCircle && circleStart) {
+   941→      const dist = Math.sqrt((pos.x - circleStart.x) ** 2 + (pos.y - circleStart.y) ** 2);
+   942→      setCirclePreview({ x: circleStart.x, y: circleStart.y, radius: dist });
+   943→    }
+   944→    if (isDrawingRect && rectStart) {
+   945→      setRectPreview({ x: rectStart.x, y: rectStart.y, w: pos.x - rectStart.x, h: pos.y - rectStart.y });
+   946→    }
+   947→  };
+   948→
+   949→  const handleMouseUp = (e: React.MouseEvent) => {
+   950→    const pos = getMousePos(e);
+   951→    if (isDragging) setIsDragging(false);
+   952→    if (isDrawingCircle && circleStart && currentTool === 'circle') {
+   953→      const dist = Math.sqrt((pos.x - circleStart.x) ** 2 + (pos.y - circleStart.y) ** 2);
+   954→      const finalRadius = dist > 10 ? dist : circleRadius;
+   955→      const newCircle: EditorCircle = { id: `circle-${Date.now()}`, type: 'circle', x: circleStart.x, y: circleStart.y, radius: finalRadius, color: currentColor };
+   956→      setObjects(prev => [...prev, newCircle]);
+   957→      setSelectedObjectId(newCircle.id);
+   958→      setIsDrawingCircle(false);
+   959→      setCircleStart(null);
+   960→      setCirclePreview(null);
+   961→      setCurrentTool('select');
+   962→    }
+   963→    if (isDrawingRect && rectStart && currentTool === 'rectangle') {
+   964→      const w = pos.x - rectStart.x;
+   965→      const h = pos.y - rectStart.y;
+   966→      if (Math.abs(w) > 10 && Math.abs(h) > 10) {
+   967→        const newRect: EditorCircle = { id: `rect-${Date.now()}`, type: 'rectangle', x: rectStart.x, y: rectStart.y, width: w, height: h, color: currentColor };
+   968→        setObjects(prev => [...prev, newRect]);
+   969→        setSelectedObjectId(newRect.id);
+   970→      }
+   971→      setIsDrawingRect(false);
+   972→      setRectStart(null);
+   973→      setRectPreview(null);
+   974→      setCurrentTool('select');
+   975→    }
+   976→    if (isDrawingArrow && arrowStart && currentTool === 'arrow') {
+   977→      const distance = Math.sqrt((pos.x - arrowStart.x) ** 2 + (pos.y - arrowStart.y) ** 2);
+   978→      if (distance > 10) {
+   979→        const newArrow: EditorCircle = { id: `arrow-${Date.now()}`, type: 'arrow', x: arrowStart.x, y: arrowStart.y, endX: pos.x, endY: pos.y, color: currentColor };
+   980→        setObjects(prev => [...prev, newArrow]);
+   981→        setSelectedObjectId(newArrow.id);
+   982→      }
+   983→      setIsDrawingArrow(false);
+   984→      setArrowStart(null);
+   985→      setArrowPreview(null);
+   986→      setCurrentTool('select');
+   987→    }
+   988→  };
+   989→
+   990→  // Touch event handlers for mobile
+   991→  const handleTouchStart = (e: React.TouchEvent) => {
+   992→    e.preventDefault();
+   993→    const pos = getTouchPos(e);
+   994→    if (currentTool === 'select') {
+   995→      const obj = findObjectAtPosition(pos.x, pos.y);
+   996→      if (obj) {
+   997→        setSelectedObjectId(obj.id);
+   998→        setIsDragging(true);
+   999→        setDragOffset({ x: pos.x - obj.x, y: pos.y - obj.y });
+  1000→      } else {
+  1001→        setSelectedObjectId(null);
+  1002→      }
+  1003→    } else if (currentTool === 'circle') {
+  1004→      setIsDrawingCircle(true);
+  1005→      setCircleStart(pos);
+  1006→      setCirclePreview({ x: pos.x, y: pos.y, radius: 5 });
+  1007→    } else if (currentTool === 'circlePhoto') {
+  1008→      setPendingPhotoCircle({ id: `cp-${Date.now()}`, type: 'circleWithPhoto', x: pos.x, y: pos.y, radius: circleRadius, color: currentColor });
+  1009→      setShowAddPhotoDialog(true);
+  1010→    } else if (currentTool === 'arrow') {
+  1011→      setIsDrawingArrow(true);
+  1012→      setArrowStart(pos);
+  1013→      setArrowPreview(pos);
+  1014→    } else if (currentTool === 'rectangle') {
+  1015→      setIsDrawingRect(true);
+  1016→      setRectStart(pos);
+  1017→      setRectPreview({ x: pos.x, y: pos.y, w: 1, h: 1 });
+  1018→    }
+  1019→  };
+  1020→
+  1021→  const handleTouchMove = (e: React.TouchEvent) => {
+  1022→    e.preventDefault();
+  1023→    const pos = getTouchPos(e);
+  1024→    if (isDragging && selectedObjectId) {
+  1025→      setObjects(prev => prev.map(obj => {
+  1026→        if (obj.id !== selectedObjectId) return obj;
+  1027→        const newX = pos.x - dragOffset.x;
+  1028→        const newY = pos.y - dragOffset.y;
+  1029→        if (obj.type === 'arrow') {
+  1030→          const dx = obj.endX! - obj.x;
+  1031→          const dy = obj.endY! - obj.y;
+  1032→          return { ...obj, x: newX, y: newY, endX: newX + dx, endY: newY + dy };
+  1033→        }
+  1034→        if (obj.type === 'rectangle') {
+  1035→          return { ...obj, x: newX, y: newY };
+  1036→        }
+  1037→        return { ...obj, x: newX, y: newY };
+  1038→      }));
+  1039→    }
+  1040→    if (isDrawingArrow) setArrowPreview(pos);
+  1041→    if (isDrawingCircle && circleStart) {
+  1042→      const dist = Math.sqrt((pos.x - circleStart.x) ** 2 + (pos.y - circleStart.y) ** 2);
+  1043→      setCirclePreview({ x: circleStart.x, y: circleStart.y, radius: dist });
+  1044→    }
+  1045→    if (isDrawingRect && rectStart) {
+  1046→      setRectPreview({ x: rectStart.x, y: rectStart.y, w: pos.x - rectStart.x, h: pos.y - rectStart.y });
+  1047→    }
+  1048→  };
+  1049→
+  1050→  const handleTouchEnd = (e: React.TouchEvent) => {
+  1051→    e.preventDefault();
+  1052→    if (isDragging) setIsDragging(false);
+  1053→    if (isDrawingCircle && circleStart && currentTool === 'circle') {
+  1054→      const pos = circlePreview || circleStart;
+  1055→      const dist = Math.sqrt((pos.x - circleStart.x) ** 2 + (pos.y - circleStart.y) ** 2);
+  1056→      const finalRadius = dist > 10 ? dist : circleRadius;
+  1057→      const newCircle: EditorCircle = { id: `circle-${Date.now()}`, type: 'circle', x: circleStart.x, y: circleStart.y, radius: finalRadius, color: currentColor };
+  1058→      setObjects(prev => [...prev, newCircle]);
+  1059→      setSelectedObjectId(newCircle.id);
+  1060→      setIsDrawingCircle(false);
+  1061→      setCircleStart(null);
+  1062→      setCirclePreview(null);
+  1063→      setCurrentTool('select');
+  1064→    }
+  1065→    if (isDrawingRect && rectStart && currentTool === 'rectangle') {
+  1066→      const preview = rectPreview || { x: rectStart.x, y: rectStart.y, w: 0, h: 0 };
+  1067→      if (Math.abs(preview.w) > 10 && Math.abs(preview.h) > 10) {
+  1068→        const newRect: EditorCircle = { id: `rect-${Date.now()}`, type: 'rectangle', x: rectStart.x, y: rectStart.y, width: preview.w, height: preview.h, color: currentColor };
+  1069→        setObjects(prev => [...prev, newRect]);
+  1070→        setSelectedObjectId(newRect.id);
+  1071→      }
+  1072→      setIsDrawingRect(false);
+  1073→      setRectStart(null);
+  1074→      setRectPreview(null);
+  1075→      setCurrentTool('select');
+  1076→    }
+  1077→    if (isDrawingArrow && arrowStart && currentTool === 'arrow') {
+  1078→      const pos = arrowPreview || arrowStart;
+  1079→      const distance = Math.sqrt((pos.x - arrowStart.x) ** 2 + (pos.y - arrowStart.y) ** 2);
+  1080→      if (distance > 10) {
+  1081→        const newArrow: EditorCircle = { id: `arrow-${Date.now()}`, type: 'arrow', x: arrowStart.x, y: arrowStart.y, endX: pos.x, endY: pos.y, color: currentColor };
+  1082→        setObjects(prev => [...prev, newArrow]);
+  1083→        setSelectedObjectId(newArrow.id);
+  1084→      }
+  1085→      setIsDrawingArrow(false);
+  1086→      setArrowStart(null);
+  1087→      setArrowPreview(null);
+  1088→      setCurrentTool('select');
+  1089→    }
+  1090→  };
+  1091→
+  1092→  const handleAddPhotoToCircle = (file: File) => {
+  1093→    if (!pendingPhotoCircle) return;
+  1094→    const reader = new FileReader();
+  1095→    reader.onload = (e) => {
+  1096→      const imageData = e.target?.result as string;
+  1097→      setObjects(prev => [...prev, { ...pendingPhotoCircle, imageData }]);
+  1098→      setPendingPhotoCircle(null);
+  1099→      setShowAddPhotoDialog(false);
+  1100→      setCurrentTool('select');
+  1101→    };
+  1102→    reader.readAsDataURL(file);
+  1103→  };
+  1104→
+  1105→  const deleteSelected = () => {
+  1106→    if (selectedObjectId) {
+  1107→      setObjects(prev => prev.filter(obj => obj.id !== selectedObjectId));
+  1108→      setSelectedObjectId(null);
+  1109→    }
+  1110→  };
+  1111→
+  1112→  const resizeSelected = (delta: number) => {
+  1113→    if (selectedObjectId) {
+  1114→      setObjects(prev => prev.map(obj => {
+  1115→        if (obj.id !== selectedObjectId) return obj;
+  1116→        if (obj.type === 'rectangle') {
+  1117→          return { ...obj, width: Math.max(20, (obj.width || 100) + delta * 1.5), height: Math.max(20, (obj.height || 80) + delta * 1.5) };
+  1118→        }
+  1119→        if (!obj.radius) return obj;
+  1120→        return { ...obj, radius: Math.max(20, Math.min(200, obj.radius + delta)) };
+  1121→      }));
+  1122→    }
+  1123→  };
+  1124→
+  1125→  const handleSave = () => {
+  1126→    const embeddedPhotos: EmbeddedPhoto[] = objects.filter(obj => obj.type === 'circleWithPhoto' && obj.imageData).map(obj => ({ id: obj.id, circleX: obj.x, circleY: obj.y, circleRadius: obj.radius || 50, imageData: obj.imageData! }));
+  1127→    
+  1128→    // Exportar canvas como imagem editada
+  1129→    const canvas = canvasRef.current;
+  1130→    if (canvas) {
+  1131→      try {
+  1132→        const editedImageData = canvas.toDataURL('image/png');
+  1133→        onSave({ embeddedPhotos, editedImageData });
+  1134→      } catch (error) {
+  1135→        console.error('Error exporting canvas:', error);
+  1136→        onSave({ embeddedPhotos });
+  1137→      }
+  1138→    } else {
+  1139→      onSave({ embeddedPhotos });
+  1140→    }
+  1141→    onClose();
+  1142→  };
+  1143→
+  1144→  useEffect(() => {
+  1145→    const handleKeyDown = (e: KeyboardEvent) => {
+  1146→      if ((e.key === 'Delete' || e.key === 'Backspace') && selectedObjectId && !showAddPhotoDialog) { e.preventDefault(); deleteSelected(); }
+  1147→      if (e.key === 'Escape') { setSelectedObjectId(null); setCurrentTool('select'); }
+  1148→    };
+  1149→    window.addEventListener('keydown', handleKeyDown);
+  1150→    return () => window.removeEventListener('keydown', handleKeyDown);
+  1151→  }, [selectedObjectId, showAddPhotoDialog]);
+  1152→
+  1153→  return (
+  1154→    <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-2 md:p-4">
+  1155→      <div className="bg-white rounded-lg max-w-5xl w-full max-h-[95vh] overflow-hidden flex flex-col">
+  1156→        <div className="flex items-center justify-between p-3 md:p-4 border-b">
+  1157→          <h3 className="text-base md:text-lg font-semibold flex items-center gap-2"><Edit className="h-4 w-4 md:h-5 md:w-5 text-orange-500" />Editor de Foto</h3>
+  1158→          <Button variant="ghost" size="icon" className="h-10 w-10 md:h-8 md:w-8" onClick={onClose}><X className="h-5 w-5 md:h-4 md:w-4" /></Button>
+  1159→        </div>
+  1160→        
+  1161→        {/* Mobile Tools - Horizontal scroll */}
+  1162→        <div className="md:hidden flex items-center gap-2 p-2 border-b bg-gray-50 overflow-x-auto">
+  1163→          <div className="flex items-center gap-1 flex-shrink-0">
+  1164→            <Button variant={currentTool === 'select' ? "default" : "outline"} size="sm" className={`h-10 w-10 p-0 ${currentTool === 'select' ? "bg-orange-500 hover:bg-orange-600" : ""}`} onClick={() => setCurrentTool('select')}><MousePointer className="h-5 w-5" /></Button>
+  1165→            <Button variant={currentTool === 'circle' ? "default" : "outline"} size="sm" className={`h-10 w-10 p-0 ${currentTool === 'circle' ? "bg-orange-500 hover:bg-orange-600" : ""}`} onClick={() => setCurrentTool('circle')}><Circle className="h-5 w-5" /></Button>
+  1166→            <Button variant={currentTool === 'circlePhoto' ? "default" : "outline"} size="sm" className={`h-10 w-10 p-0 ${currentTool === 'circlePhoto' ? "bg-orange-500 hover:bg-orange-600" : ""}`} onClick={() => setCurrentTool('circlePhoto')}><div className="relative"><Circle className="h-5 w-5" /><Camera className="h-3 w-3 absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2" /></div></Button>
+  1167→            <Button variant={currentTool === 'arrow' ? "default" : "outline"} size="sm" className={`h-10 w-10 p-0 ${currentTool === 'arrow' ? "bg-orange-500 hover:bg-orange-600" : ""}`} onClick={() => setCurrentTool('arrow')}><ArrowUpRight className="h-5 w-5" /></Button>
+  1168→            <Button variant={currentTool === 'rectangle' ? "default" : "outline"} size="sm" className={`h-10 w-10 p-0 ${currentTool === 'rectangle' ? "bg-orange-500 hover:bg-orange-600" : ""}`} onClick={() => setCurrentTool('rectangle')}><Square className="h-5 w-5" /></Button>
+  1169→            <Button variant="outline" size="sm" className="h-10 w-10 p-0" onClick={() => setRotation((rotation + 90) % 360)} title="Girar 90°">
+  1170→              <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 2v6h-6"/><path d="M3 12a9 9 0 0 1 15-6.7L21 8"/><path d="M3 22v-6h6"/><path d="M21 12a9 9 0 0 1-15 6.7L3 16"/></svg>
+  1171→            </Button>
+  1172→          </div>
+  1173→          <div className="flex items-center gap-1 flex-shrink-0 ml-2">
+  1174→            {['#f97316', '#ef4444', '#22c55e', '#3b82f6', '#ffffff', '#000000'].map(color => (
+  1175→              <button key={color} className={`w-8 h-8 rounded border-2 ${currentColor === color ? 'border-orange-500' : 'border-gray-300'}`} style={{ backgroundColor: color }} onClick={() => setCurrentColor(color)} />
+  1176→            ))}
+  1177→          </div>
+  1178→          <div className="flex items-center gap-1 flex-shrink-0 ml-2 border-l pl-2">
+  1179→            <input
+  1180→              type="range"
+  1181→              min="20"
+  1182→              max="200"
+  1183→              value={circleRadius}
+  1184→              onChange={(e) => setCircleRadius(Number(e.target.value))}
+  1185→              className="w-20 h-2 accent-orange-500"
+  1186→            />
+  1187→            <span className="text-xs text-gray-600">{circleRadius}</span>
+  1188→          </div>
+  1189→          {selectedObjectId && (
+  1190→            <div className="flex items-center gap-1 flex-shrink-0 ml-2">
+  1191→              <Button variant="outline" size="sm" className="h-10 w-10 p-0" onClick={() => resizeSelected(-10)}>-</Button>
+  1192→              <Button variant="outline" size="sm" className="h-10 w-10 p-0" onClick={() => resizeSelected(10)}>+</Button>
+  1193→              <Button variant="destructive" size="sm" className="h-10 w-10 p-0" onClick={deleteSelected}><Trash2 className="h-5 w-5" /></Button>
+  1194→            </div>
+  1195→          )}
+  1196→        </div>
+  1197→
+  1198→        {/* Desktop Tools */}
+  1199→        <div className="hidden md:flex items-center gap-2 p-3 border-b bg-gray-50 flex-wrap">
+  1200→          <div className="flex items-center gap-1 border-r pr-3">
+  1201→            <Button variant={currentTool === 'select' ? "default" : "outline"} size="sm" className={currentTool === 'select' ? "bg-orange-500 hover:bg-orange-600" : ""} onClick={() => setCurrentTool('select')}><MousePointer className="h-4 w-4" /></Button>
+  1202→            <Button variant={currentTool === 'circle' ? "default" : "outline"} size="sm" className={currentTool === 'circle' ? "bg-orange-500 hover:bg-orange-600" : ""} onClick={() => setCurrentTool('circle')}><Circle className="h-4 w-4" /></Button>
+  1203→            <Button variant={currentTool === 'circlePhoto' ? "default" : "outline"} size="sm" className={currentTool === 'circlePhoto' ? "bg-orange-500 hover:bg-orange-600" : ""} onClick={() => setCurrentTool('circlePhoto')}><div className="relative"><Circle className="h-4 w-4" /><Camera className="h-2.5 w-2.5 absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2" /></div></Button>
+  1204→            <Button variant={currentTool === 'arrow' ? "default" : "outline"} size="sm" className={currentTool === 'arrow' ? "bg-orange-500 hover:bg-orange-600" : ""} onClick={() => setCurrentTool('arrow')}><ArrowUpRight className="h-4 w-4" /></Button>
+  1205→            <Button variant={currentTool === 'rectangle' ? "default" : "outline"} size="sm" className={currentTool === 'rectangle' ? "bg-orange-500 hover:bg-orange-600" : ""} onClick={() => setCurrentTool('rectangle')}><Square className="h-4 w-4" /></Button>
+  1206→            <Button variant="outline" size="sm" onClick={() => setRotation((rotation + 90) % 360)} title="Girar 90°">
+  1207→              <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 2v6h-6"/><path d="M3 12a9 9 0 0 1 15-6.7L21 8"/><path d="M3 22v-6h6"/><path d="M21 12a9 9 0 0 1-15 6.7L3 16"/></svg>
+  1208→              <span className="ml-1 text-xs">Girar</span>
+  1209→            </Button>
+  1210→          </div>
+  1211→          <div className="flex items-center gap-2">
+  1212→            <Label className="text-xs text-gray-500">Cor:</Label>
+  1213→            {['#f97316', '#ef4444', '#22c55e', '#3b82f6', '#ffffff', '#000000'].map(color => (
+  1214→              <button key={color} className={`w-6 h-6 rounded border-2 ${currentColor === color ? 'border-orange-500' : 'border-gray-300'}`} style={{ backgroundColor: color }} onClick={() => setCurrentColor(color)} />
+  1215→            ))}
+  1216→          </div>
+  1217→          <div className="flex items-center gap-2 border-l pl-3">
+  1218→            <Label className="text-xs text-gray-500">Tamanho:</Label>
+  1219→            <input
+  1220→              type="range"
+  1221→              min="20"
+  1222→              max="200"
+  1223→              value={circleRadius}
+  1224→              onChange={(e) => setCircleRadius(Number(e.target.value))}
+  1225→              className="w-24 h-2 accent-orange-500"
+  1226→            />
+  1227→            <span className="text-xs text-gray-600 w-8">{circleRadius}px</span>
+  1228→          </div>
+  1229→          {selectedObjectId && (
+  1230→            <div className="flex items-center gap-2 border-l pl-3">
+  1231→              <Button variant="outline" size="sm" onClick={() => resizeSelected(-10)}>-</Button>
+  1232→              <Button variant="outline" size="sm" onClick={() => resizeSelected(10)}>+</Button>
+  1233→              <Button variant="destructive" size="sm" onClick={deleteSelected}><Trash2 className="h-4 w-4" /></Button>
+  1234→            </div>
+  1235→          )}
+  1236→          <div className="ml-auto text-xs text-gray-500">
+  1237→            {currentTool === 'select' && 'Clique para selecionar, arraste para mover'}
+  1238→            {currentTool === 'circle' && 'Clique e arraste para desenhar círculo'}
+  1239→            {currentTool === 'circlePhoto' && 'Clique para adicionar círculo com foto'}
+  1240→            {currentTool === 'arrow' && 'Clique e arraste para desenhar seta'}
+  1241→            {currentTool === 'rectangle' && 'Clique e arraste para desenhar retângulo'}
+  1242→          </div>
+  1243→        </div>
+  1244→
+  1245→        {/* Mobile instructions */}
+  1246→        {selectedObjectId && (
+  1247→          <div className="md:hidden text-center text-xs text-orange-600 py-2 bg-orange-50">
+  1248→            Objeto selecionado • Use os botões + e - para redimensionar
+  1249→          </div>
+  1250→        )}
+  1251→        
+  1252→        <div ref={containerRef} className="flex-1 overflow-auto p-2 md:p-4 flex justify-center bg-gray-100">
+  1253→          {imageSrc ? (
+  1254→            <canvas 
+  1255→              ref={canvasRef} 
+  1256→              className="border rounded shadow-lg cursor-crosshair touch-none max-w-full" 
+  1257→              onMouseDown={handleMouseDown} 
+  1258→              onMouseMove={handleMouseMove} 
+  1259→              onMouseUp={handleMouseUp} 
+  1260→              onMouseLeave={handleMouseUp}
+  1261→              onTouchStart={handleTouchStart}
+  1262→              onTouchMove={handleTouchMove}
+  1263→              onTouchEnd={handleTouchEnd}
+  1264→              style={{ width: canvasSize.width, height: canvasSize.height }} 
+  1265→            />
+  1266→          ) : (
+  1267→            <div className="flex items-center justify-center h-64 text-gray-500">Nenhuma foto para editar</div>
+  1268→          )}
+  1269→        </div>
+  1270→        
+  1271→        <div className="flex justify-between items-center gap-2 p-3 md:p-4 border-t bg-white">
+  1272→          <p className="text-xs text-gray-500 hidden md:block">Delete para remover • Esc para cancelar</p>
+  1273→          <p className="text-xs text-gray-500 md:hidden">Toque no objeto para selecionar</p>
+  1274→          <div className="flex gap-2">
+  1275→            <Button variant="outline" onClick={onClose} className="min-h-[44px] h-11 px-6">Cancelar</Button>
+  1276→            <Button className="bg-orange-500 hover:bg-orange-600 min-h-[44px] h-11 px-6" onClick={handleSave}><Check className="h-5 w-5 mr-2" />Salvar</Button>
+  1277→          </div>
+  1278→        </div>
+  1279→      </div>
+  1280→      <Dialog open={showAddPhotoDialog} onOpenChange={(open) => { setShowAddPhotoDialog(open); if (!open) { setPendingPhotoCircle(null); setCurrentTool('select'); } }}>
+  1281→        <DialogContent className="max-w-[90vw]">
+  1282→          <DialogHeader><DialogTitle>Adicionar Foto ao Círculo</DialogTitle></DialogHeader>
+  1283→          <div className="space-y-4">
+  1284→            <p className="text-sm text-gray-500">Escolha uma foto:</p>
+  1285→            <div className="flex flex-col sm:flex-row gap-2">
+  1286→              <Button variant="outline" className="flex-1 h-12" onClick={() => {
+  1287→                const input = document.createElement('input');
+  1288→                input.type = 'file';
+  1289→                input.accept = 'image/*';
+  1290→                input.onchange = (e) => { const file = (e.target as HTMLInputElement).files?.[0]; if (file) handleAddPhotoToCircle(file); };
+  1291→                input.click();
+  1292→              }}><Upload className="h-5 w-5 mr-2" />Upload</Button>
+  1293→              <Button variant="outline" className="flex-1 h-12" onClick={async () => {
+  1294→                try {
+  1295→                  const items = await navigator.clipboard.read();
+  1296→                  for (const item of items) { for (const type of item.types) { if (type.startsWith('image/')) { const blob = await item.getType(type); handleAddPhotoToCircle(blob as File); } } }
+  1297→                } catch (err) { console.error('Failed to paste:', err); }
+  1298→              }}><Camera className="h-5 w-5 mr-2" />Colar</Button>
+  1299→            </div>
+  1300→          </div>
+  1301→        </DialogContent>
+  1302→      </Dialog>
+  1303→    </div>
+  1304→  );
+  1305→}
+  1306→
+  1307→// Função para gerar imagem preta com número de série
+  1308→function generateSerialNumberImage(serialNumber: string | undefined): string | null {
+  1309→  if (!serialNumber || serialNumber.trim() === '') return null;
+  1310→  
+  1311→  const canvas = document.createElement('canvas');
+  1312→  canvas.width = 400;
+  1313→  canvas.height = 200;
+  1314→  const ctx = canvas.getContext('2d');
+  1315→  
+  1316→  if (!ctx) return null;
+  1317→  
+  1318→  // Fundo preto
+  1319→  ctx.fillStyle = '#000000';
+  1320→  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  1321→  
+  1322→  // Texto branco
+  1323→  ctx.fillStyle = '#FFFFFF';
+  1324→  ctx.font = 'bold 32px monospace';
+  1325→  ctx.textAlign = 'center';
+  1326→  ctx.textBaseline = 'middle';
+  1327→  
+  1328→  // Desenhar o número de série
+  1329→  ctx.fillText(serialNumber.trim(), canvas.width / 2, canvas.height / 2);
+  1330→  
+  1331→  return canvas.toDataURL('image/png');
+  1332→}
+  1333→
+  1334→// Componente para foto de identificação
+  1335→function IdentificationPhoto({
+  1336→  label,
+  1337→  imageData,
+  1338→  onUpload,
+  1339→  onRemove,
+  1340→  caption,
+  1341→  t,
+  1342→}: {
+  1343→  label: string;
+  1344→  imageData: string | null;
+  1345→  onUpload: (data: string) => void;
+  1346→  onRemove: () => void;
+  1347→  caption?: string;
+  1348→  t: (key: string, params?: Record<string, string | number>) => string;
+  1349→}) {
+  1350→  const [showOptions, setShowOptions] = useState(false);
+  1351→  const [showFullscreen, setShowFullscreen] = useState(false);
+  1352→  const [cameraStream, setCameraStream] = useState<MediaStream | null>(null);
+  1353→  const [showCamera, setShowCamera] = useState(false);
+  1354→
+  1355→  const handleFileUpload = (file: File) => {
+  1356→    const reader = new FileReader();
+  1357→    reader.onload = (e) => { onUpload(e.target?.result as string); };
+  1358→    reader.readAsDataURL(file);
+  1359→  };
+  1360→
+  1361→  const handleOpenCamera = async () => {
+  1362→    try {
+  1363→      const stream = await navigator.mediaDevices.getUserMedia({ 
+  1364→        video: { facingMode: 'environment' } 
+  1365→      });
+  1366→      setCameraStream(stream);
+  1367→      setShowCamera(true);
+  1368→    } catch (err) {
+  1369→      console.error('Erro ao abrir câmera:', err);
+  1370→      alert('Não foi possível acessar a câmera. Verifique as permissões.');
+  1371→    }
+  1372→  };
+  1373→
+  1374→  const handleCapturePhoto = () => {
+  1375→    const video = document.getElementById('camera-video-identification') as HTMLVideoElement;
+  1376→    if (!video) return;
+  1377→    
+  1378→    const canvas = document.createElement('canvas');
+  1379→    canvas.width = video.videoWidth;
+  1380→    canvas.height = video.videoHeight;
+  1381→    const ctx = canvas.getContext('2d');
+  1382→    if (ctx) {
+  1383→      ctx.drawImage(video, 0, 0);
+  1384→      const imageData = canvas.toDataURL('image/png');
+  1385→      onUpload(imageData);
+  1386→    }
+  1387→    
+  1388→    // Stop camera
+  1389→    if (cameraStream) {
+  1390→      cameraStream.getTracks().forEach(track => track.stop());
+  1391→      setCameraStream(null);
+  1392→    }
+  1393→    setShowCamera(false);
+  1394→  };
+  1395→
+  1396→  const handleCloseCamera = () => {
+  1397→    if (cameraStream) {
+  1398→      cameraStream.getTracks().forEach(track => track.stop());
+  1399→      setCameraStream(null);
+  1400→    }
+  1401→    setShowCamera(false);
+  1402→  };
+  1403→
+  1404→  const handlePaste = async () => {
+  1405→    try {
+  1406→      const clipboardItems = await navigator.clipboard.read();
+  1407→      for (const item of clipboardItems) {
+  1408→        for (const type of item.types) {
+  1409→          if (type.startsWith('image/')) {
+  1410→            const blob = await item.getType(type);
+  1411→            const reader = new FileReader();
+  1412→            reader.onload = (e) => { onUpload(e.target?.result as string); };
+  1413→            reader.readAsDataURL(blob);
+  1414→          }
+  1415→        }
+  1416→      }
+  1417→    } catch (err) {
+  1418→      console.error('Failed to paste:', err);
+  1419→    }
+  1420→  };
+  1421→
+  1422→  return (
+  1423→    <>
+  1424→      <Card className="overflow-hidden">
+  1425→        <div className="p-2 bg-orange-500 text-white text-center font-semibold text-sm">{label}</div>
+  1426→        <div 
+  1427→          className="relative h-28 md:h-32 bg-gray-100 flex items-center justify-center cursor-pointer hover:bg-gray-200 transition-colors active:bg-gray-300" 
+  1428→          onClick={() => setShowOptions(true)}
+  1429→        >
+  1430→          {imageData ? (
+  1431→            <>
+  1432→              <img src={imageData} alt={label} className="w-full h-full object-cover" />
+  1433→              <Button 
+  1434→                size="icon" 
+  1435→                className="absolute top-1 right-1 rounded-full bg-red-600 hover:bg-red-700 h-8 w-8 md:h-6 md:w-6" 
+  1436→                onClick={(e) => { e.stopPropagation(); onRemove(); }}
+  1437→              >
+  1438→                <X className="h-4 w-4 md:h-3 md:w-3" />
+  1439→              </Button>
+  1440→            </>
+  1441→          ) : (
+  1442→            <div className="text-center text-gray-400">
+  1443→              <Camera className="h-8 w-8 mx-auto mb-1" />
+  1444→              <p className="text-xs">{t('photos.clickToAdd')}</p>
+  1445→            </div>
+  1446→          )}
+  1447→        </div>
+  1448→        {caption && <div className="p-2 bg-gray-50 text-center text-xs text-gray-600 min-h-[32px]">{caption}</div>}
+  1449→      </Card>
+  1450→
+  1451→      {/* Photo Options Dialog */}
+  1452→      <PhotoOptionsDialog
+  1453→        open={showOptions}
+  1454→        onOpenChange={setShowOptions}
+  1455→        hasImage={!!imageData}
+  1456→        onUpload={handleFileUpload}
+  1457→        onCamera={handleOpenCamera}
+  1458→        onPaste={handlePaste}
+  1459→        onViewFullscreen={() => setShowFullscreen(true)}
+  1460→        t={t}
+  1461→      />
+  1462→
+  1463→      {/* Fullscreen Viewer */}
+  1464→      {showFullscreen && imageData && (
+  1465→        <FullScreenImageViewer
+  1466→          imageData={imageData}
+  1467→          onClose={() => setShowFullscreen(false)}
+  1468→          t={t}
+  1469→        />
+  1470→      )}
+  1471→
+  1472→      {/* Camera Dialog */}
+  1473→      {showCamera && cameraStream && (
+  1474→        <div className="fixed inset-0 bg-black z-[100] flex flex-col">
+  1475→          <div className="flex justify-between items-center p-3 md:p-4 bg-black/50">
+  1476→            <span className="text-white font-semibold text-sm md:text-base">{label}</span>
+  1477→            <Button variant="ghost" size="icon" className="text-white h-10 w-10" onClick={handleCloseCamera}>
+  1478→              <X className="h-6 w-6" />
+  1479→            </Button>
+  1480→          </div>
+  1481→          <div className="flex-1 relative">
+  1482→            <video
+  1483→              id="camera-video-identification"
+  1484→              autoPlay
+  1485→              playsInline
+  1486→              muted
+  1487→              className="w-full h-full object-cover"
+  1488→              ref={(video) => {
+  1489→                if (video && cameraStream) {
+  1490→                  video.srcObject = cameraStream;
+  1491→                }
+  1492→              }}
+  1493→            />
+  1494→          </div>
+  1495→          <div className="p-4 md:p-6 flex justify-center bg-black/50">
+  1496→            <Button 
+  1497→              size="lg"
+  1498→              className="rounded-full h-16 w-16 md:h-14 md:w-14 bg-white text-black hover:bg-gray-200"
+  1499→              onClick={handleCapturePhoto}
+  1500→            >
+  1501→              <Camera className="h-8 w-8 md:h-7 md:w-7" />
+  1502→            </Button>
+  1503→          </div>
+  1504→        </div>
+  1505→      )}
+  1506→    </>
+  1507→  );
+  1508→}
+  1509→
+  1510→// ============================================
+  1511→// ABA HOME - Com Categorias
+  1512→// ============================================
+  1513→function HomeContent({ reportId, onRegenerateId }: { reportId: string; onRegenerateId: () => void }) {
+  1514→  const {
+  1515→    inspection,
+  1516→    categories,
+  1517→    conclusion,
+  1518→    updateInspection,
+  1519→    setCategories,
+  1520→    addPhotoToCategory,
+  1521→    removePhotoFromCategory,
+  1522→    updatePhotoInCategory,
+  1523→    movePhotoInCategory,
+  1524→    addAdditionalPartToCategory,
+  1525→    removeAdditionalPartFromCategory,
+  1526→    updateAdditionalPartsParentPn,
+  1527→    setConclusion,
+  1528→    clearAll,
+  1529→  } = useHomeReportStore();
+  1530→  
+  1531→  const { language, t } = useTranslation();
+  1532→
+  1533→  const [expandedCategories, setExpandedCategories] = useState<Record<string, boolean>>({});
+  1534→  const [showPhotoOptions, setShowPhotoOptions] = useState<{ categoryId: string; photoId: string } | null>(null);
+  1535→  const [showAdditionalParts, setShowAdditionalParts] = usePersistedState<Record<string, boolean>>('home-subparts-open', {});
+  1536→  const [showClearConfirm, setShowClearConfirm] = useState(false);
+  1537→  const [isLoading, setIsLoading] = useState(false);
+  1538→  const [editingPhoto, setEditingPhoto] = useState<{ categoryId: string; photo: PhotoData; editMode: 'primary' | 'secondary' | 'dual' } | null>(null);
+  1539→  const [showMovePhotoDialog, setShowMovePhotoDialog] = useState<{ categoryId: string; photoId: string; currentIndex: number } | null>(null);
+  1540→  const [movePhotoToIndex, setMovePhotoToIndex] = useState(0);
+  1541→  const [showEmailDialog, setShowEmailDialog] = useState(false);
+  1542→  const [fullscreenImage, setFullscreenImage] = useState<string | null>(null);
+  1543→  const [cameraStream, setCameraStream] = useState<MediaStream | null>(null);
+  1544→  const [showCamera, setShowCamera] = useState(false);
+  1545→  const [cameraTarget, setCameraTarget] = useState<{ categoryId: string; photoId: string } | null>(null);
+  1546→  const [showExportDialog, setShowExportDialog] = useState(false);
+  1547→  const [showDataDialog, setShowDataDialog] = useState(false);
+  1548→  const [isTranslating, setIsTranslating] = useState(false);
+  1549→  const [showTranslateDialog, setShowTranslateDialog] = useState(false);
+  1550→  const [translateProgress, setTranslateProgress] = useState({ current: 0, total: 0, status: '' });
+  1551→
+  1552→  const fileInputRef = useRef<HTMLInputElement>(null);
+  1553→  const fileImportRef = useRef<HTMLInputElement>(null);
+  1554→  // Função para traduzir todos os textos dinâmicos - HomeContent
+  1555→  const handleTranslateAllHome = async (targetLang: Language) => {
+  1556→    setShowTranslateDialog(true);
+  1557→    setIsTranslating(true);
+  1558→    
+  1559→    try {
+  1560→      // Coletar todos os textos para traduzir
+  1561→      const textItems: { id: string; text: string; type: string }[] = [];
+  1562→      
+  1563→      // Textos da inspeção
+  1564→      if (inspection.descricao?.trim()) {
+  1565→        textItems.push({ id: 'inspection.descricao', text: inspection.descricao, type: 'inspection' });
+  1566→      }
+  1567→      if (inspection.osExecucao?.trim()) {
+  1568→        textItems.push({ id: 'inspection.osExecucao', text: inspection.osExecucao, type: 'inspection' });
+  1569→      }
+  1570→      if (inspection.inspetor?.trim()) {
+  1571→        textItems.push({ id: 'inspection.inspetor', text: inspection.inspetor, type: 'inspection' });
+  1572→      }
+  1573→      if (inspection.cliente?.trim()) {
+  1574→        textItems.push({ id: 'inspection.cliente', text: inspection.cliente, type: 'inspection' });
+  1575→      }
+  1576→      
+  1577→      // Textos das categorias e fotos
+  1578→      categories.forEach((category) => {
+  1579→        category.photos.forEach((photo) => {
+  1580→          if (photo.description?.trim()) {
+  1581→            textItems.push({ id: `photo.${category.id}.${photo.id}.description`, text: photo.description, type: 'photo' });
+  1582→          }
+  1583→          if (photo.partName?.trim()) {
+  1584→            textItems.push({ id: `photo.${category.id}.${photo.id}.partName`, text: photo.partName, type: 'photo' });
+  1585→          }
+  1586→        });
+  1587→        
+  1588→        // Peças adicionais
+  1589→        category.additionalParts?.forEach((part) => {
+  1590→          if (part.partName?.trim()) {
+  1591→            textItems.push({ id: `part.${category.id}.${part.id}.partName`, text: part.partName, type: 'part' });
+  1592→          }
+  1593→        });
+  1594→      });
+  1595→      
+  1596→      // Conclusão
+  1597→      if (conclusion?.trim()) {
+  1598→        textItems.push({ id: 'conclusion', text: conclusion, type: 'conclusion' });
+  1599→      }
+  1600→      
+  1601→      const total = textItems.length;
+  1602→      setTranslateProgress({ current: 0, total, status: `Encontrados ${total} textos para traduzir` });
+  1603→      
+  1604→      if (total === 0) {
+  1605→        alert('Nenhum texto encontrado para traduzir!');
+  1606→        setShowTranslateDialog(false);
+  1607→        setIsTranslating(false);
+  1608→        return;
+  1609→      }
+  1610→      
+  1611→      // Enviar todos os textos para tradução
+  1612→      setTranslateProgress({ current: 0, total, status: 'Enviando para API de tradução...' });
+  1613→      
+  1614→      const response = await fetch('/api/translate-content', {
+  1615→        method: 'POST',
+  1616→        headers: { 'Content-Type': 'application/json' },
+  1617→        body: JSON.stringify({
+  1618→          texts: textItems.map(item => item.text),
+  1619→          targetLanguage: targetLang,
+  1620→        }),
+  1621→      });
+  1622→      
+  1623→      if (!response.ok) {
+  1624→        const errorData = await response.json().catch(() => ({}));
+  1625→        throw new Error(errorData.message || `Erro na API: ${response.status}`);
+  1626→      }
+  1627→      
+  1628→      const data = await response.json();
+  1629→      const translations: string[] = data.translations || [];
+  1630→      
+  1631→      setTranslateProgress({ current: total, total, status: 'Aplicando traduções...' });
+  1632→      
+  1633→      // Aplicar traduções de volta
+  1634→      for (let i = 0; i < textItems.length; i++) {
+  1635→        const item = textItems[i];
+  1636→        const translation = translations[i] || item.text;
+  1637→        
+  1638→        if (item.id === 'inspection.descricao') {
+  1639→          updateInspection({ descricao: translation });
+  1640→        } else if (item.id === 'inspection.osExecucao') {
+  1641→          updateInspection({ osExecucao: translation });
+  1642→        } else if (item.id === 'inspection.inspetor') {
+  1643→          updateInspection({ inspetor: translation });
+  1644→        } else if (item.id === 'inspection.cliente') {
+  1645→          updateInspection({ cliente: translation });
+  1646→        } else if (item.id === 'conclusion') {
+  1647→          setConclusion(translation);
+  1648→        } else if (item.id.startsWith('photo.')) {
+  1649→          const [, categoryId, photoId, field] = item.id.split('.');
+  1650→          if (field === 'description') {
+  1651→            updatePhotoInCategory(categoryId, photoId, { description: translation });
+  1652→          } else if (field === 'partName') {
+  1653→            updatePhotoInCategory(categoryId, photoId, { partName: translation });
+  1654→          }
+  1655→        } else if (item.id.startsWith('part.')) {
+  1656→          const [, categoryId, partId] = item.id.split('.');
+  1657→          const category = categories.find(c => c.id === categoryId);
+  1658→          if (category) {
+  1659→            const partIndex = category.additionalParts?.findIndex(p => p.id === partId) ?? -1;
+  1660→            if (partIndex !== -1 && category.additionalParts) {
+  1661→              const updatedParts = [...category.additionalParts];
+  1662→              updatedParts[partIndex] = { ...updatedParts[partIndex], partName: translation };
+  1663→              // Update via store if available, otherwise skip
+  1664→            }
+  1665→          }
+  1666→        }
+  1667→      }
+  1668→      
+  1669→      setTranslateProgress({ current: total, total, status: 'Tradução concluída!' });
+  1670→      
+  1671→      setTimeout(() => {
+  1672→        setShowTranslateDialog(false);
+  1673→        alert(`✅ Tradução concluída!\n\n${total} textos traduzidos para ${LANGUAGE_NAMES[targetLang]}`);
+  1674→      }, 500);
+  1675→      
+  1676→    } catch (error) {
+  1677→      console.error('Erro ao traduzir:', error);
+  1678→      alert('Erro ao traduzir o conteúdo: ' + (error instanceof Error ? error.message : 'Erro desconhecido'));
+  1679→      setShowTranslateDialog(false);
+  1680→    }
+  1681→    setIsTranslating(false);
+  1682→  };
+  1683→
+  1684→  // Função para abrir o diálogo de tradução
+  1685→  const handleTranslateContentHome = () => {
+  1686→    setShowTranslateDialog(true);
+  1687→  };
+  1688→
+  1689→  const handleTagChange = (tag: string) => {
+  1690→    updateInspection({ tag });
+  1691→    if (tag && MACHINE_DATA[tag]) {
+  1692→      const machine = MACHINE_DATA[tag];
+  1693→      updateInspection({ modelo: machine.modelo, sn: machine.sn, entrega: machine.entrega, cliente: machine.cliente });
+  1694→    }
+  1695→  };
+  1696→
+  1697→  const handlePhotoUpload = (categoryId: string, photoId: string, file: File) => {
+  1698→    const reader = new FileReader();
+  1699→    reader.onload = (e) => { updatePhotoInCategory(categoryId, photoId, { imageData: e.target?.result as string, editedImageData: null }); };
+  1700→    reader.readAsDataURL(file);
+  1701→    setShowPhotoOptions(null);
+  1702→  };
+  1703→
+  1704→  const handlePaste = useCallback(async (categoryId: string, photoId: string) => {
+  1705→    try {
+  1706→      const clipboardItems = await navigator.clipboard.read();
+  1707→      for (const item of clipboardItems) {
+  1708→        for (const type of item.types) {
+  1709→          if (type.startsWith('image/')) {
+  1710→            const blob = await item.getType(type);
+  1711→            const reader = new FileReader();
+  1712→            reader.onload = (e) => { updatePhotoInCategory(categoryId, photoId, { imageData: e.target?.result as string, editedImageData: null }); };
+  1713→            reader.readAsDataURL(blob);
+  1714→          }
+  1715→        }
+  1716→      }
+  1717→    } catch (err) { console.error('Failed to paste:', err); }
+  1718→    setShowPhotoOptions(null);
+  1719→  }, [updatePhotoInCategory]);
+  1720→
+  1721→  // Camera functions
+  1722→  const openCamera = async () => {
+  1723→    try {
+  1724→      const stream = await navigator.mediaDevices.getUserMedia({ 
+  1725→        video: { facingMode: 'environment' } 
+  1726→      });
+  1727→      setCameraStream(stream);
+  1728→      setShowCamera(true);
+  1729→    } catch (err) {
+  1730→      console.error('Erro ao abrir câmera:', err);
+  1731→      alert('Não foi possível acessar a câmera. Verifique as permissões.');
+  1732→    }
+  1733→  };
+  1734→
+  1735→  const closeCamera = () => {
+  1736→    if (cameraStream) {
+  1737→      cameraStream.getTracks().forEach(track => track.stop());
+  1738→      setCameraStream(null);
+  1739→    }
+  1740→    setShowCamera(false);
+  1741→    setCameraTarget(null);
+  1742→  };
+  1743→
+  1744→  const capturePhoto = () => {
+  1745→    const video = document.getElementById('camera-video-home') as HTMLVideoElement;
+  1746→    if (!video || !cameraTarget) return;
+  1747→    
+  1748→    const canvas = document.createElement('canvas');
+  1749→    canvas.width = video.videoWidth;
+  1750→    canvas.height = video.videoHeight;
+  1751→    const ctx = canvas.getContext('2d');
+  1752→    if (ctx) {
+  1753→      ctx.drawImage(video, 0, 0);
+  1754→      const imageData = canvas.toDataURL('image/png');
+  1755→      updatePhotoInCategory(cameraTarget.categoryId, cameraTarget.photoId, { imageData, editedImageData: null });
+  1756→    }
+  1757→    
+  1758→    closeCamera();
+  1759→    setShowPhotoOptions(null);
+  1760→  };
+  1761→
+  1762→  // Ctrl+V listener removido - colar foto apenas pelo botão "Colar da área de transferência"
+  1763→
+  1764→  const handleClearReport = () => { clearAll(); setShowClearConfirm(false); onRegenerateId(); };
+  1765→
+  1766→  const handleExport = () => {
+  1767→    // Export ALL data including photos (base64), categories, inspection, conclusion
+  1768→    const data = { 
+  1769→      version: '1.0',
+  1770→      exportDate: new Date().toISOString(),
+  1771→      inspection, 
+  1772→      categories, 
+  1773→      conclusion 
+  1774→    };
+  1775→    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+  1776→    const url = URL.createObjectURL(blob);
+  1777→    const a = document.createElement('a');
+  1778→    a.href = url;
+  1779→    a.download = `Relatorio_${sanitizeForFilename(inspection.descricao || inspection.tag)}_${reportId}_${new Date().toISOString().split('T')[0]}.json`;
+  1780→    a.click();
+  1781→    URL.revokeObjectURL(url);
+  1782→  };
+  1783→
+  1784→  const handleImport = (e: React.ChangeEvent<HTMLInputElement>) => {
+  1785→    const file = e.target.files?.[0];
+  1786→    if (!file) return;
+  1787→    // Check if there's existing data that might conflict
+  1788→    const hasExistingData = inspection.tag || inspection.cliente || categories.some(cat => 
+  1789→      cat.photos.some(p => p.imageData || p.pn || p.description || p.partName) || 
+  1790→      cat.additionalParts.length > 0
+  1791→    ) || conclusion;
+  1792→    if (hasExistingData) {
+  1793→      if (!confirm('Já existe um relatório em andamento. Deseja substituí-lo pelo arquivo importado? Os dados atuais serão perdidos.')) {
+  1794→        e.target.value = '';
+  1795→        return;
+  1796→      }
+  1797→      // Clear existing data before importing to prevent conflicts
+  1798→      clearAll();
+  1799→    }
+  1800→    const reader = new FileReader();
+  1801→    reader.onload = (event) => {
+  1802→      try {
+  1803→        const data = JSON.parse(event.target?.result as string);
+  1804→        // Import inspection data
+  1805→        if (data.inspection) {
+  1806→          Object.keys(data.inspection).forEach(key => {
+  1807→            updateInspection({ [key]: data.inspection[key] });
+  1808→          });
+  1809→        }
+  1810→        // Import categories with all photos and additional parts
+  1811→        if (data.categories && Array.isArray(data.categories)) {
+  1812→          // Fix sub-part associations: if sub-part has parentPn but photo has no PN, set it
+  1813→          data.categories.forEach((cat: any) => {
+  1814→            if (cat.additionalParts && cat.additionalParts.length > 0) {
+  1815→              const subPartsByParent = new Map<string, any[]>();
+  1816→              cat.additionalParts.forEach((ap: any) => {
+  1817→                if (ap.parentPn) {
+  1818→                  if (!subPartsByParent.has(ap.parentPn)) subPartsByParent.set(ap.parentPn, []);
+  1819→                  subPartsByParent.get(ap.parentPn)!.push(ap);
+  1820→                }
+  1821→              });
+  1822→              subPartsByParent.forEach((subs, parentPn) => {
+  1823→                let matchedPhoto = cat.photos.find((p: any) => p.pn === parentPn);
+  1824→                if (!matchedPhoto) {
+  1825→                  matchedPhoto = cat.photos.find((p: any) => !p.pn);
+  1826→                  if (matchedPhoto) matchedPhoto.pn = parentPn;
+  1827→                }
+  1828→              });
+  1829→            }
+  1830→          });
+  1831→
+  1832→          setCategories(data.categories);
+  1833→          // Auto-expand sub-parts sections for photos that have them
+  1834→          const expandMap: Record<string, boolean> = {};
+  1835→          data.categories.forEach((cat: any) => {
+  1836→            if (cat.additionalParts && cat.additionalParts.length > 0) {
+  1837→              const parentPns = new Set(cat.additionalParts.map((p: any) => p.parentPn).filter(Boolean));
+  1838→              cat.photos.forEach((photo: any) => {
+  1839→                if (parentPns.has(photo.pn)) {
+  1840→                  expandMap[`${cat.id}-${photo.id}`] = true;
+  1841→                }
+  1842→              });
+  1843→            }
+  1844→          });
+  1845→          if (Object.keys(expandMap).length > 0) {
+  1846→            setShowAdditionalParts(prev => ({ ...prev, ...expandMap }));
+  1847→          }
+  1848→        }
+  1849→        // Import conclusion
+  1850→        if (data.conclusion !== undefined) setConclusion(data.conclusion);
+  1851→      } catch (err) { 
+  1852→        console.error('Failed to import:', err);
+  1853→        alert('Erro ao importar arquivo. Verifique se o arquivo é válido.');
+  1854→      }
+  1855→      // Reset input to allow re-importing same file
+  1856→      e.target.value = '';
+  1857→    };
+  1858→    reader.onerror = () => {
+  1859→      alert('Erro ao ler o arquivo.');
+  1860→      e.target.value = '';
+  1861→    };
+  1862→    reader.readAsText(file);
+  1863→  };
+  1864→
+  1865→  // Função para mover foto para posição específica
+  1866→  const handleMovePhotoToPosition = () => {
+  1867→    if (movePhotoFromIndex === null) return;
+  1868→    if (movePhotoFromIndex === movePhotoToIndex) {
+  1869→      setShowMovePhotoDialog(false);
+  1870→      setMovePhotoFromIndex(null);
+  1871→      return;
+  1872→    }
+  1873→    
+  1874→    movePhoto(movePhotoFromIndex, movePhotoToIndex);
+  1875→    setShowMovePhotoDialog(false);
+  1876→    setMovePhotoFromIndex(null);
+  1877→  };
+  1878→
+  1879→  const handleGeneratePPT = async () => {
+  1880→    setIsLoading(true);
+  1881→    try {
+  1882→      // Translate dynamic texts if not in Portuguese
+  1883→      if (language !== 'pt') {
+  1884→        const { translateDynamic, translateDynamicBatch } = useTranslationStore.getState();
+  1885→        
+  1886→        // Translate all inspection text fields
+  1887→        const translatedInspection = { ...inspection };
+  1888→        if (inspection.descricao) {
+  1889→          translatedInspection.descricao = await translateDynamic(inspection.descricao);
+  1890→        }
+  1891→        if (inspection.osExecucao) {
+  1892→          translatedInspection.osExecucao = await translateDynamic(inspection.osExecucao);
+  1893→        }
+  1894→        if (inspection.inspetor) {
+  1895→          translatedInspection.inspetor = await translateDynamic(inspection.inspetor);
+  1896→        }
+  1897→        if (inspection.cliente) {
+  1898→          translatedInspection.cliente = await translateDynamic(inspection.cliente);
+  1899→        }
+  1900→        
+  1901→        // Translate all category photos
+  1902→        const translatedCategories = await Promise.all(categories.map(async (category) => {
+  1903→          const translatedPhotos = await Promise.all(category.photos.map(async (photo) => {
+  1904→            const translatedPhoto = { ...photo };
+  1905→            if (photo.description) {
+  1906→              translatedPhoto.description = await translateDynamic(photo.description);
+  1907→            }
+  1908→            if (photo.partName) {
+  1909→              translatedPhoto.partName = await translateDynamic(photo.partName);
+  1910→            }
+  1911→            return translatedPhoto;
+  1912→          }));
+  1913→          
+  1914→          const translatedAdditionalParts = await Promise.all(category.additionalParts.map(async (part) => {
+  1915→            const translatedPart = { ...part };
+  1916→            if (part.partName) {
+  1917→              translatedPart.partName = await translateDynamic(part.partName);
+  1918→            }
+  1919→            return translatedPart;
+  1920→          }));
+  1921→          
+  1922→          return {
+  1923→            ...category,
+  1924→            photos: translatedPhotos,
+  1925→            additionalParts: translatedAdditionalParts,
+  1926→          };
+  1927→        }));
+  1928→        
+  1929→        // Translate conclusion
+  1930→        const translatedConclusion = conclusion ? await translateDynamic(conclusion) : conclusion;
+  1931→        
+  1932→        await generateHomePowerPoint({ 
+  1933→          inspection: translatedInspection, 
+  1934→          categories: translatedCategories, 
+  1935→          conclusion: translatedConclusion,
+  1936→          language,
+  1937→          reportId
+  1938→        });
+  1939→        // Auto-download Excel parts table
+  1940→        exportPartsTableToExcelHome(translatedInspection, translatedCategories, reportId);
+  1941→      } else {
+  1942→        await generateHomePowerPoint({ inspection, categories, conclusion, language: 'pt', reportId });
+  1943→        // Auto-download Excel parts table
+  1944→        exportPartsTableToExcelHome(inspection, categories, reportId);
+  1945→      }
+  1946→    } catch (error) { 
+  1947→      console.error('Error generating PowerPoint:', error); 
+  1948→    }
+  1949→    setIsLoading(false);
+  1950→  };
+  1951→
+  1952→  // Email handlers
+  1953→  const handleSendAnalysisEmail = () => {
+  1954→    const subject = generateEmailSubject(inspection, 'analysis', reportId);
+  1955→    const body = generateAnalysisEmailBody(inspection, [], [], categories, reportId);
+  1956→    openEmailClient({
+  1957→      to: EMAIL_CONFIG.analysisRecipients,
+  1958→      cc: EMAIL_CONFIG.analysisCc,
+  1959→      subject,
+  1960→      body,
+  1961→    });
+  1962→    setShowEmailDialog(false);
+  1963→  };
+  1964→
+  1965→  const handleSendConclusionEmail = () => {
+  1966→    const subject = generateEmailSubject(inspection, 'conclusion', reportId);
+  1967→    const body = generateConclusionEmailBody(inspection, conclusion, [], [], categories, reportId);
+  1968→    openEmailClient({
+  1969→      to: EMAIL_CONFIG.conclusionRecipients,
+  1970→      cc: EMAIL_CONFIG.conclusionCc,
+  1971→      subject,
+  1972→      body,
+  1973→    });
+  1974→    setShowEmailDialog(false);
+  1975→  };
+  1976→
+  1977→  const toggleCategory = (categoryId: string) => {
+  1978→    setExpandedCategories(prev => ({ ...prev, [categoryId]: !prev[categoryId] }));
+  1979→  };
+  1980→
+  1981→  return (
+  1982→    <>
+  1983→      {/* Action Buttons - Responsivo */}
+  1984→      <div className="fixed top-20 right-4 md:flex flex-col gap-2 z-40 hidden">
+  1985→        <Button size="icon" className="rounded-full bg-red-600 hover:bg-red-700" onClick={() => setShowClearConfirm(true)} title={t('action.clear')}><Trash2 className="h-5 w-5" /></Button>
+  1986→        
+  1987→        {/* Botão de Traduzir */}
+  1988→        <Button 
+  1989→          size="icon" 
+  1990→          className="rounded-full bg-cyan-600 hover:bg-cyan-700" 
+  1991→          onClick={handleTranslateContentHome} 
+  1992→          disabled={isTranslating}
+  1993→          title={t('action.translate')}
+  1994→        >
+  1995→          {isTranslating ? <Loader2 className="h-5 w-5 animate-spin" /> : <Globe className="h-5 w-5" />}
+  1996→        </Button>
+  1997→        
+  1998→        {/* Botão de Dados (Importar/Exportar JSON) */}
+  1999→        <Button size="icon" className="rounded-full bg-blue-600 hover:bg-blue-700" onClick={() => setShowDataDialog(true)} title={t('action.importExport')}><FileDown className="h-5 w-5" /></Button>
+  2000→        
+  2001→        {/* Botão de Exportar (PDF/RDO) */}
+  2002→        <Button size="icon" className="rounded-full bg-purple-600 hover:bg-purple-700" onClick={() => setShowExportDialog(true)} title={t('action.download')}><Download className="h-5 w-5" /></Button>
+  2003→        
+  2004→        <Button size="icon" className="rounded-full bg-orange-500 hover:bg-orange-600" onClick={() => setShowEmailDialog(true)} title="Enviar Email"><Mail className="h-5 w-5" /></Button>
+  2005→      </div>
+  2006→      
+  2007→      {/* Mobile Action Bar - Botão flutuante */}
+  2008→      <MobileActionMenu
+  2009→        onAddPhoto={() => addPhotoToCategory(categories[0]?.id || '')}
+  2010→        onDataDialog={() => setShowDataDialog(true)}
+  2011→        onExportDialog={() => setShowExportDialog(true)}
+  2012→        onEmailDialog={() => setShowEmailDialog(true)}
+  2013→        onClearConfirm={() => setShowClearConfirm(true)}
+  2014→        reportData={{ inspection, categories, conclusion }}
+  2015→        reportType="home"
+  2016→        t={t}
+  2017→      />
+  2018→      <input ref={fileInputRef} type="file" accept="image/*" multiple onChange={handleImport} className="hidden" />
+  2019→      <input ref={fileImportRef} type="file" accept=".json" onChange={handleImport} className="hidden" />
+  2020→
+  2021→      {/* Export Dialog - PDF/RDO */}
+  2022→      <Dialog open={showExportDialog} onOpenChange={setShowExportDialog}>
+  2023→        <DialogContent className="max-w-[90vw] md:max-w-md">
+  2024→          <DialogHeader>
+  2025→            <DialogTitle className="text-lg flex items-center gap-2">
+  2026→              <Download className="h-5 w-5 text-orange-500" />
+  2027→              {t('action.download')}
+  2028→            </DialogTitle>
+  2029→            <DialogDescription>{t('action.downloadDesc')}</DialogDescription>
+  2030→          </DialogHeader>
+  2031→          <div className="space-y-3 pt-4">
+  2032→            <Button 
+  2033→              className="w-full justify-start h-16 md:h-14 text-left" 
+  2034→              variant="outline"
+  2035→              onClick={() => { handleGeneratePPT(); setShowExportDialog(false); }}
+  2036→              disabled={isLoading}
+  2037→            >
+  2038→              <div className="flex items-center gap-3">
+  2039→                <div className="w-10 h-10 md:w-8 md:h-8 rounded-full bg-purple-100 flex items-center justify-center flex-shrink-0">
+  2040→                  <FileImage className="h-5 w-5 md:h-4 md:w-4 text-purple-600" />
+  2041→                </div>
+  2042→                <div>
+  2043→                  <p className="font-medium">{t('rdo.powerpoint')}</p>
+  2044→                  <p className="text-xs text-gray-500">{t('action.pptDesc')}</p>
+  2045→                </div>
+  2046→              </div>
+  2047→            </Button>
+  2048→            
+  2049→            <Button 
+  2050→              className="w-full justify-start h-16 md:h-14 text-left" 
+  2051→              variant="outline"
+  2052→              onClick={() => { alert('🚧 Relatório RDO está em construção. Em breve estará disponível!'); }}
+  2053→            >
+  2054→              <div className="flex items-center gap-3">
+  2055→                <div className="w-10 h-10 md:w-8 md:h-8 rounded-full bg-gray-100 flex items-center justify-center flex-shrink-0">
+  2056→                  <FileText className="h-5 w-5 md:h-4 md:w-4 text-gray-400" />
+  2057→                </div>
+  2058→                <div className="text-left">
+  2059→                  <p className="font-medium text-gray-400">{t('rdo.executive')} 🚧</p>
+  2060→                  <p className="text-xs text-gray-400">Em construção...</p>
+  2061→                </div>
+  2062→              </div>
+  2063→            </Button>
+  2064→          </div>
+  2065→          <DialogFooter>
+  2066→            <Button variant="outline" onClick={() => setShowExportDialog(false)}>{t('action.cancel')}</Button>
+  2067→          </DialogFooter>
+  2068→        </DialogContent>
+  2069→      </Dialog>
+  2070→
+  2071→      {/* Data Dialog - Import/Export JSON */}
+  2072→      <Dialog open={showDataDialog} onOpenChange={setShowDataDialog}>
+  2073→        <DialogContent className="max-w-[90vw] md:max-w-md">
+  2074→          <DialogHeader>
+  2075→            <DialogTitle className="text-lg flex items-center gap-2">
+  2076→              <FileDown className="h-5 w-5 text-blue-500" />
+  2077→              {t('action.importExport')}
+  2078→            </DialogTitle>
+  2079→            <DialogDescription>{t('action.importExportDesc')}</DialogDescription>
+  2080→          </DialogHeader>
+  2081→          <div className="space-y-3 pt-4">
+  2082→            <Button 
+  2083→              className="w-full justify-start h-16 md:h-14 text-left" 
+  2084→              variant="outline"
+  2085→              onClick={() => { handleExport(); setShowDataDialog(false); }}
+  2086→            >
+  2087→              <div className="flex items-center gap-3">
+  2088→                <div className="w-10 h-10 md:w-8 md:h-8 rounded-full bg-green-100 flex items-center justify-center flex-shrink-0">
+  2089→                  <Download className="h-5 w-5 md:h-4 md:w-4 text-green-600" />
+  2090→                </div>
+  2091→                <div>
+  2092→                  <p className="font-medium">{t('action.exportJson')}</p>
+  2093→                  <p className="text-xs text-gray-500">{t('action.exportJsonDesc')}</p>
+  2094→                </div>
+  2095→              </div>
+  2096→            </Button>
+  2097→            
+  2098→            <Button 
+  2099→              className="w-full justify-start h-16 md:h-14 text-left" 
+  2100→              variant="outline"
+  2101→              onClick={() => { fileImportRef.current?.click(); setShowDataDialog(false); }}
+  2102→            >
+  2103→              <div className="flex items-center gap-3">
+  2104→                <div className="w-10 h-10 md:w-8 md:h-8 rounded-full bg-blue-100 flex items-center justify-center flex-shrink-0">
+  2105→                  <Upload className="h-5 w-5 md:h-4 md:w-4 text-blue-600" />
+  2106→                </div>
+  2107→                <div>
+  2108→                  <p className="font-medium">{t('action.importJson')}</p>
+  2109→                  <p className="text-xs text-gray-500">{t('action.importJsonDesc')}</p>
+  2110→                </div>
+  2111→              </div>
+  2112→            </Button>
+  2113→          </div>
+  2114→          <DialogFooter>
+  2115→            <Button variant="outline" onClick={() => setShowDataDialog(false)}>{t('action.cancel')}</Button>
+  2116→          </DialogFooter>
+  2117→        </DialogContent>
+  2118→      </Dialog>
+  2119→
+  2120→      {/* Email Options Dialog */}
+  2121→      <Dialog open={showEmailDialog} onOpenChange={setShowEmailDialog}>
+  2122→        <DialogContent className="max-w-[90vw] md:max-w-lg">
+  2123→          <DialogHeader>
+  2124→            <DialogTitle className="text-lg">Enviar Email</DialogTitle>
+  2125→            <DialogDescription>Selecione o tipo de email que deseja enviar:</DialogDescription>
+  2126→          </DialogHeader>
+  2127→          <div className="space-y-3 pt-4">
+  2128→            <Button 
+  2129→              className="w-full justify-start h-16 md:h-14 text-left" 
+  2130→              variant="outline"
+  2131→              onClick={handleSendAnalysisEmail}
+  2132→            >
+  2133→              <div className="flex items-center gap-3">
+  2134→                <div className="w-10 h-10 md:w-8 md:h-8 rounded-full bg-amber-100 flex items-center justify-center flex-shrink-0">
+  2135→                  <Mail className="h-5 w-5 md:h-4 md:w-4 text-amber-600" />
+  2136→                </div>
+  2137→                <div>
+  2138→                  <div className="font-semibold">Análise</div>
+  2139→                  <div className="text-xs text-gray-500">Envia para Wallysson, Emerson e Jadson</div>
+  2140→                </div>
+  2141→              </div>
+  2142→            </Button>
+  2143→            <Button 
+  2144→              className="w-full justify-start h-16 md:h-14 text-left" 
+  2145→              variant="outline"
+  2146→              onClick={handleSendConclusionEmail}
+  2147→            >
+  2148→              <div className="flex items-center gap-3">
+  2149→                <div className="w-10 h-10 md:w-8 md:h-8 rounded-full bg-emerald-100 flex items-center justify-center flex-shrink-0">
+  2150→                  <Mail className="h-5 w-5 md:h-4 md:w-4 text-emerald-600" />
+  2151→                </div>
+  2152→                <div>
+  2153→                  <div className="font-semibold">Concluído</div>
+  2154→                  <div className="text-xs text-gray-500">Envia para todos os destinatários</div>
+  2155→                </div>
+  2156→              </div>
+  2157→            </Button>
+  2158→          </div>
+  2159→        </DialogContent>
+  2160→      </Dialog>
+  2161→
+  2162→      {/* Cover Page */}
+  2163→      <section className="p-8">
+  2164→        <Card className="max-w-4xl mx-auto">
+  2165→          <CardHeader><CardTitle className="text-2xl font-bold">{t('report.technicalReport')}</CardTitle></CardHeader>
+  2166→          <CardContent className="space-y-6">
+  2167→            {/* Machine Information */}
+  2168→            <div className="space-y-4">
+  2169→              <h3 className="text-lg font-semibold flex items-center gap-2"><Package className="h-5 w-5 text-orange-500" />{t('report.executionInfo')}</h3>
+  2170→              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+  2171→                <div className="space-y-2"><Label>{t('report.tag')}</Label><Input list="tag-options-home" value={inspection.tag} onChange={(e) => handleTagChange(e.target.value)} placeholder={t('placeholder.tag')} /><datalist id="tag-options-home">{TAG_OPTIONS.map(tag => (<option key={tag} value={tag} />))}</datalist></div>
+  2172→                <div className="space-y-2"><Label>{t('report.modelo')}</Label><Input value={inspection.modelo} onChange={(e) => updateInspection({ modelo: e.target.value })} placeholder={t('placeholder.modelo')} /></div>
+  2173→                <div className="space-y-2"><Label>{t('report.sn')}</Label><Input value={inspection.sn} onChange={(e) => updateInspection({ sn: e.target.value })} placeholder={t('placeholder.sn')} /></div>
+  2174→                <div className="space-y-2"><Label>{t('report.entrega')}</Label><Input value={inspection.entrega} onChange={(e) => updateInspection({ entrega: e.target.value })} placeholder={t('placeholder.entrega')} /></div>
+  2175→                <div className="space-y-2"><Label>{t('report.cliente')}</Label><Input value={inspection.cliente} onChange={(e) => updateInspection({ cliente: e.target.value })} placeholder={t('placeholder.cliente')} /></div>
+  2176→                <div className="space-y-2"><Label>{t('report.descricao')}</Label><Input value={inspection.descricao} onChange={(e) => updateInspection({ descricao: e.target.value })} placeholder={t('placeholder.descricao')} /></div>
+  2177→                <div className="space-y-2"><Label>{t('report.machineDown')}</Label><Select value={inspection.machineDown} onValueChange={(value) => updateInspection({ machineDown: value as 'Yes' | 'No' })}><SelectTrigger><SelectValue placeholder={t('select.selectOption')} /></SelectTrigger><SelectContent><SelectItem value="No">{t('select.no')}</SelectItem><SelectItem value="Yes">{t('select.yes')}</SelectItem></SelectContent></Select></div>
+  2178→              </div>
+  2179→            </div>
+  2180→
+  2181→            <Separator />
+  2182→
+  2183→            {/* Fotos de Identificação da Máquina */}
+  2184→            <div className="space-y-4">
+  2185→              <h3 className="text-lg font-semibold flex items-center gap-2"><Camera className="h-5 w-5 text-orange-500" />{t('machine.identification')}</h3>
+  2186→              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+  2187→                <IdentificationPhoto label={t('machine.equipmentPhoto')} imageData={inspection.machinePhoto} onUpload={(data) => updateInspection({ machinePhoto: data })} onRemove={() => updateInspection({ machinePhoto: null })} caption={inspection.tag || t('machine.equipmentTag')} t={t} />
+  2188→                <IdentificationPhoto label={t('machine.hourMeterPhoto')} imageData={inspection.horimetroPhoto} onUpload={(data) => updateInspection({ horimetroPhoto: data })} onRemove={() => updateInspection({ horimetroPhoto: null })} caption={`${t('report.hourMeter')}: ${inspection.horimetro || '-'}`} t={t} />
+  2189→                <IdentificationPhoto label={t('machine.serialPhoto')} imageData={inspection.serialPhoto || generateSerialNumberImage(inspection.sn)} onUpload={(data) => updateInspection({ serialPhoto: data })} onRemove={() => updateInspection({ serialPhoto: null })} caption={`${t('machine.serialNumber')}: ${inspection.sn || '-'}`} t={t} />
+  2190→                <IdentificationPhoto label={t('machine.localPhoto')} imageData={inspection.localPhoto} onUpload={(data) => updateInspection({ localPhoto: data })} onRemove={() => updateInspection({ localPhoto: null })} t={t} />
+  2191→              </div>
+  2192→            </div>
+  2193→
+  2194→            <Separator />
+  2195→
+  2196→            {/* Execution Information */}
+  2197→            <div className="space-y-4">
+  2198→              <h3 className="text-lg font-semibold flex items-center gap-2"><Clock className="h-5 w-5 text-orange-500" />{t('report.reportData')}</h3>
+  2199→              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+  2200→                <div className="space-y-2"><Label>{t('report.executionDate')}</Label><Input type="date" value={inspection.data} onChange={(e) => updateInspection({ data: e.target.value })} /></div>
+  2201→                <div className="space-y-2"><Label>{t('report.endDateOptional')}</Label><Input type="date" value={inspection.dataFinal} onChange={(e) => updateInspection({ dataFinal: e.target.value })} /></div>
+  2202→                <div className="space-y-2"><Label>{t('report.workOrderOptional')}</Label><Input value={inspection.osExecucao} onChange={(e) => updateInspection({ osExecucao: e.target.value })} placeholder={t('placeholder.os')} /></div>
+  2203→                <div className="space-y-2"><Label>{t('report.performers')}</Label><Input value={inspection.inspetor} onChange={(e) => updateInspection({ inspetor: e.target.value })} placeholder={t('placeholder.inspector')} /></div>
+  2204→                <div className="space-y-2"><Label>{t('report.hourMeter')}</Label><Input value={inspection.horimetro} onChange={(e) => updateInspection({ horimetro: e.target.value })} placeholder={t('placeholder.hourmeter')} /></div>
+  2205→              </div>
+  2206→            </div>
+  2207→          </CardContent>
+  2208→        </Card>
+  2209→      </section>
+  2210→
+  2211→      {/* Categorized Photos Section */}
+  2212→      <section className="p-8 bg-gray-50">
+  2213→        <div className="max-w-6xl mx-auto">
+  2214→          <h2 className="text-2xl font-bold flex items-center gap-2 mb-6">
+  2215→            <Camera className="h-6 w-6 text-orange-500" />
+  2216→            {t('photos.title')}
+  2217→          </h2>
+  2218→
+  2219→          {/* Categories */}
+  2220→          <div className="space-y-4">
+  2221→            {categories.map((category, catIndex) => (
+  2222→              <Collapsible key={category.id} open={expandedCategories[category.id] ?? false} onOpenChange={() => toggleCategory(category.id)}>
+  2223→                <Card>
+  2224→                  <CollapsibleTrigger asChild>
+  2225→                    <CardHeader className="cursor-pointer hover:bg-gray-50">
+  2226→                      <div className="flex items-center justify-between">
+  2227→                        <div className="flex items-center gap-3">
+  2228→                          <div className="w-10 h-10 rounded-full bg-orange-500 flex items-center justify-center text-white font-bold">
+  2229→                            {catIndex + 1}
+  2230→                          </div>
+  2231→                          <div>
+  2232→                            <CardTitle className="text-lg">{t(`category.${category.id}`, { defaultValue: category.title })}</CardTitle>
+  2233→                            <p className="text-sm text-gray-500">{t(`category.${category.id}Desc`, { defaultValue: category.description })}</p>
+  2234→                          </div>
+  2235→                        </div>
+  2236→                        <div className="flex items-center gap-2">
+  2237→                          <Badge variant="secondary">{t('photos.photoCount', { count: category.photos.filter(p => p.imageData).length })}</Badge>
+  2238→                          {expandedCategories[category.id] ? <ChevronUp className="h-5 w-5 text-gray-500" /> : <ChevronDown className="h-5 w-5 text-gray-500" />}
+  2239→                        </div>
+  2240→                      </div>
+  2241→                    </CardHeader>
+  2242→                  </CollapsibleTrigger>
+  2243→                  <CollapsibleContent>
+  2244→                    <CardContent className="pt-0">
+  2245→                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+  2246→                        {category.photos.map((photo, index) => (
+  2247→                          <Card key={photo.id} className="overflow-hidden group border-2 border-gray-200">
+  2248→                            <div className="p-3 bg-black/5 space-y-2">
+  2249→                              <div className="flex items-center justify-between">
+  2250→                                <span className="text-xs font-semibold text-gray-600">{t('photos.photo')} {index + 1}</span>
+  2251→                                <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+  2252→                                  {category.photos.length > 1 && (
+  2253→                                    <Button variant="ghost" size="icon" className="h-6 w-6 text-blue-500 hover:text-blue-700" onClick={() => { setShowMovePhotoDialog({ categoryId: category.id, photoId: photo.id, currentIndex: index }); setMovePhotoToIndex(index); }} title="Mover para outra posição"><ArrowUpRight className="h-3.5 w-3.5" /></Button>
+  2254→                                  )}
+  2255→                                  {category.photos.length > 2 && (
+  2256→                                    <Button variant="ghost" size="icon" className="h-6 w-6 text-red-500 hover:text-red-700" onClick={() => removePhotoFromCategory(category.id, photo.id)} title={t('action.remove')}><Trash2 className="h-3.5 w-3.5" /></Button>
+  2257→                                  )}
+  2258→                                </div>
+  2259→                              </div>
+  2260→                              <div className="flex items-center gap-2 flex-wrap">
+  2261→                                <Label className="text-xs font-semibold text-orange-600 whitespace-nowrap">{t('photo.pn')}:</Label>
+  2262→                                <Input className="h-7 text-xs flex-1 min-w-0" value={photo.pn} onChange={(e) => {
+  2263→                                  const oldPn = photo.pn;
+  2264→                                  const newPn = e.target.value;
+  2265→                                  updatePhotoInCategory(category.id, photo.id, { pn: newPn });
+  2266→                                  // Update parentPn of subparts when PN changes
+  2267→                                  if (oldPn !== newPn) {
+  2268→                                    updateAdditionalPartsParentPn(category.id, oldPn, newPn);
+  2269→                                  }
+  2270→                                }} placeholder={t('photo.pnPlaceholder')} />
+  2271→                                <Label className="text-xs whitespace-nowrap">{t('photo.serial')}:</Label>
+  2272→                                <Input className="h-7 text-xs w-24" value={photo.serialNumber || ''} onChange={(e) => updatePhotoInCategory(category.id, photo.id, { serialNumber: e.target.value })} placeholder={t('photo.serialPlaceholder')} />
+  2273→                              </div>
+  2274→                              <div className="flex items-center gap-2">
+  2275→                                <Label className="text-xs">{t('photo.partName')}:</Label>
+  2276→                                <Input className="h-7 text-xs flex-1" value={photo.partName} onChange={(e) => updatePhotoInCategory(category.id, photo.id, { partName: e.target.value })} placeholder={t('photo.partNamePlaceholder')} />
+  2277→                                <Label className="text-xs">{t('photo.quantity')}:</Label>
+  2278→                                <Input className="h-7 text-xs w-16" type="number" value={photo.quantity} onChange={(e) => updatePhotoInCategory(category.id, photo.id, { quantity: e.target.value })} placeholder={t('photo.quantityPlaceholder')} />
+  2279→                              </div>
+  2280→                              <div className="flex items-center gap-2">
+  2281→                                <Label className="text-xs">{t('photo.criticality')}:</Label>
+  2282→                                <Select value={photo.criticality || ''} onValueChange={(v) => updatePhotoInCategory(category.id, photo.id, { criticality: v as Criticality })}>
+  2283→                                  <SelectTrigger className="h-7 text-xs flex-1">
+  2284→                                    <SelectValue placeholder={t('select.selectOption')} />
+  2285→                                  </SelectTrigger>
+  2286→                                  <SelectContent>
+  2287→                                    <SelectItem value="Alta">{t('photo.criticalityHigh')}</SelectItem>
+  2288→                                    <SelectItem value="Média">{t('photo.criticalityMedium')}</SelectItem>
+  2289→                                    <SelectItem value="Baixa">{t('photo.criticalityLow')}</SelectItem>
+  2290→                                  </SelectContent>
+  2291→                                </Select>
+  2292→                              </div>
+  2293→                              <div className="flex items-center gap-2 p-2 bg-amber-100 rounded-lg border-2 border-amber-400">
+  2294→                                <Checkbox id={`subparts-home-${category.id}-${photo.id}`} checked={showAdditionalParts[`${category.id}-${photo.id}`] || category.additionalParts.filter(ap => ap.parentPn === photo.pn && (ap.pn || ap.partName)).length > 0} onCheckedChange={(checked) => setShowAdditionalParts(prev => ({ ...prev, [`${category.id}-${photo.id}`]: !!checked }))} className="border-amber-600 data-[state=checked]:bg-amber-500" />
+  2295→                                <Label htmlFor={`subparts-home-${category.id}-${photo.id}`} className="text-sm font-bold text-amber-800 cursor-pointer flex items-center gap-1"><ListTree className="h-4 w-4" /> {t('subparts.title')}</Label>
+  2296→                              </div>
+  2297→                              {(showAdditionalParts[`${category.id}-${photo.id}`] || category.additionalParts.filter(ap => ap.parentPn === photo.pn && (ap.pn || ap.partName)).length > 0) && (
+  2298→                                <AdditionalPartsSection parentPn={photo.pn} additionalParts={category.additionalParts} onAddPart={(part) => addAdditionalPartToCategory(category.id, part)} onRemovePart={(id) => removeAdditionalPartFromCategory(category.id, id)} t={t} />
+  2299→                              )}
+  2300→                            </div>
+  2301→                            <div className="relative h-40 bg-gray-200 flex items-center justify-center gap-1 cursor-pointer hover:bg-gray-300 transition-colors">
+  2302→                              {/* Primeira foto */}
+  2303→                              <div className="flex-1 h-full relative" onClick={() => { setShowPhotoOptions({ categoryId: category.id, photoId: photo.id }); }}>
+  2304→                                {photo.imageData ? (
+  2305→                                  <img src={photo.editedImageData || photo.imageData} alt={`${t('photos.photo')} ${index + 1}`} className="w-full h-full object-cover" />
+  2306→                                ) : (
+  2307→                                  <div className="text-center text-gray-500 h-full flex flex-col items-center justify-center">
+  2308→                                    <Camera className="h-10 w-10 mx-auto mb-1" />
+  2309→                                    <p className="text-xs">Foto 1</p>
+  2310→                                  </div>
+  2311→                                )}
+  2312→                                {photo.imageData && (
+  2313→                                  <div className="absolute top-1 right-1 flex gap-1">
+  2314→                                    <Button size="icon" className="rounded-full bg-orange-500 hover:bg-orange-600 h-6 w-6" onClick={(e) => { e.stopPropagation(); setEditingPhoto({ categoryId: category.id, photo, editMode: 'primary' }); }} title={t('action.edit')}><Edit className="h-3 w-3" /></Button>
+  2315→                                    <Button size="icon" className="rounded-full bg-red-600 hover:bg-red-700 h-6 w-6" onClick={(e) => { e.stopPropagation(); updatePhotoInCategory(category.id, photo.id, { imageData: null, editedImageData: null }); }} title={t('action.remove')}><Trash2 className="h-3 w-3" /></Button>
+  2316→                                  </div>
+  2317→                                )}
+  2318→                              </div>
+  2319→                              
+  2320→                              {/* Segunda foto (opcional) */}
+  2321→                              {photo.secondaryImageData && (
+  2322→                                <>
+  2323→                                  <div className="w-px h-full bg-gray-300" />
+  2324→                                  <div className="flex-1 h-full relative" onClick={(e) => { e.stopPropagation(); }}>
+  2325→                                    <img src={photo.secondaryImageData} alt={`Foto 2`} className="w-full h-full object-cover" />
+  2326→                                    <div className="absolute top-1 right-1 flex gap-1">
+  2327→                                      <Button size="icon" className="rounded-full bg-orange-500 hover:bg-orange-600 h-6 w-6" onClick={(e) => { e.stopPropagation(); setEditingPhoto({ categoryId: category.id, photo, editMode: 'secondary' }); }} title={t('action.edit')}><Edit className="h-3 w-3" /></Button>
+  2328→                                      <Button size="icon" className="rounded-full bg-red-600 hover:bg-red-700 h-6 w-6" onClick={(e) => { e.stopPropagation(); updatePhotoInCategory(category.id, photo.id, { secondaryImageData: null }); }} title="Remover segunda foto"><Trash2 className="h-3 w-3" /></Button>
+  2329→                                    </div>
+  2330→                                  </div>
+  2331→                                </>
+  2332→                              )}
+  2333→                              
+  2334→                              {/* Botão para adicionar segunda foto */}
+  2335→                              {photo.imageData && !photo.secondaryImageData && (
+  2336→                                <div className="absolute bottom-1 right-1 flex gap-1">
+  2337→                                  <Button 
+  2338→                                    size="sm" 
+  2339→                                    className="rounded bg-orange-500 hover:bg-orange-600 h-6 text-xs px-2"
+  2340→                                    onClick={(e) => { 
+  2341→                                      e.stopPropagation(); 
+  2342→                                      const input = document.createElement('input');
+  2343→                                      input.type = 'file';
+  2344→                                      input.accept = 'image/*';
+  2345→                                      input.onchange = (ev) => {
+  2346→                                        const file = (ev.target as HTMLInputElement).files?.[0];
+  2347→                                        if (file) {
+  2348→                                          const reader = new FileReader();
+  2349→                                          reader.onload = (event) => {
+  2350→                                            updatePhotoInCategory(category.id, photo.id, { secondaryImageData: event.target?.result as string });
+  2351→                                          };
+  2352→                                          reader.readAsDataURL(file);
+  2353→                                        }
+  2354→                                      };
+  2355→                                      input.click();
+  2356→                                    }}
+  2357→                                  >
+  2358→                                    + Foto
+  2359→                                  </Button>
+  2360→                                </div>
+  2361→                              )}
+  2362→                              
+  2363→                              {/* Botão de edição dupla quando tem duas fotos */}
+  2364→                              {photo.imageData && photo.secondaryImageData && (
+  2365→                                <div className="absolute bottom-1 right-1">
+  2366→                                  <Button 
+  2367→                                    size="sm" 
+  2368→                                    className="rounded bg-purple-500 hover:bg-purple-600 h-6 text-xs px-2"
+  2369→                                    onClick={(e) => { e.stopPropagation(); setEditingPhoto({ categoryId: category.id, photo, editMode: 'dual' }); }}
+  2370→                                    title="Editar ambas as fotos junto"
+  2371→                                  >
+  2372→                                    <Images className="h-3 w-3 mr-1" />
+  2373→                                    Duplo
+  2374→                                  </Button>
+  2375→                                </div>
+  2376→                              )}
+  2377→                              
+  2378→                              {photo.embeddedPhotos && photo.embeddedPhotos.length > 0 && (
+  2379→                                <div className="absolute bottom-1 left-1"><Badge className="bg-orange-500 text-white text-xs"><Circle className="h-3 w-3 mr-1" />{photo.embeddedPhotos.length}</Badge></div>
+  2380→                              )}
+  2381→                            </div>
+  2382→                            <div className="p-2">
+  2383→                              <Textarea
+  2384→                                className="h-14 text-sm"
+  2385→                                placeholder={t('photo.descriptionPlaceholder')}
+  2386→                                value={photo.description}
+  2387→                                onChange={(e) => updatePhotoInCategory(category.id, photo.id, { description: e.target.value })}
+  2388→                              />
+  2389→                            </div>
+  2390→                          </Card>
+  2391→                        ))}
+  2392→                      </div>
+  2393→                      <Button variant="outline" className="mt-4 w-full" onClick={() => addPhotoToCategory(category.id)}>
+  2394→                        <Plus className="h-4 w-4 mr-2" />{t('photos.addPhoto')}
+  2395→                      </Button>
+  2396→                    </CardContent>
+  2397→                  </CollapsibleContent>
+
+[showing lines 398-2397 of 4055; use offset=2398 with limit to continue reading]
