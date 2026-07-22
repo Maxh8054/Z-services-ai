@@ -1,0 +1,2002 @@
+     1→'use client';
+     2→
+     3→import React, { useState, useRef, useEffect, useCallback } from 'react';
+     4→import { useSession } from 'next-auth/react';
+     5→import { Button } from '@/components/ui/button';
+     6→import { Input } from '@/components/ui/input';
+     7→import { Label } from '@/components/ui/label';
+     8→import { Textarea } from '@/components/ui/textarea';
+     9→import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+    10→import { Checkbox } from '@/components/ui/checkbox';
+    11→import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+    12→import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
+    13→import { Separator } from '@/components/ui/separator';
+    14→import { Badge } from '@/components/ui/badge';
+    15→import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+    16→import { generatePowerPoint, generateHomePowerPoint } from '@/lib/powerpoint';
+    17→import { UserMenu } from '@/components/UserMenu';
+    18→import { LoginPage } from '@/components/LoginPage';
+    19→import { useStoresHydrated } from '@/hooks/useStoresHydrated';
+    20→import { usePersistedState } from '@/hooks/usePersistedState';
+    21→import { getSubPartsForPhoto, photoShouldBeInPartsTable, getDisplayPn, photoHasSubPartData } from '@/lib/partsUtils';
+    22→import { 
+    23→  generateAnalysisEmailBody, 
+    24→  generateConclusionEmailBody, 
+    25→  generateEmailSubject,
+    26→  openEmailClient,
+    27→  EMAIL_CONFIG 
+    28→} from '@/lib/emailUtils';
+    29→import { 
+    30→  exportPartsTableToExcelHome, 
+    31→  exportPartsTableToExcelInspecao,
+    32→  exportSubPartsToExcel
+    33→} from '@/lib/excelExport';
+    34→import { 
+    35→  Trash2, Plus, Download, Upload, Settings, 
+    36→  Camera, FileImage, Edit, X, Check,
+    37→  Image as ImageIcon, Clock, Wrench, Package, ListTree, Circle,
+    38→  ArrowUpRight, MousePointer, Home, ClipboardList, ChevronDown, ChevronUp, Globe, Mail, Maximize2,
+    39→  FileSpreadsheet, FileText, FileDown, Import, AlertTriangle, Menu, Loader2, Images, Square
+    40→} from 'lucide-react';
+    41→import { useReportStore } from '@/store/reportStore';
+    42→import { useHomeReportStore } from '@/store/homeReportStore';
+    43→import { useTranslationStore, useTranslation } from '@/store/translationStore';
+    44→import { TAG_OPTIONS, MACHINE_DATA } from '@/lib/config';
+    45→import type { PhotoData, AdditionalPart, EmbeddedPhoto, PhotoCategory, Criticality } from '@/types/report';
+    46→// History and finalize functionality removed
+    47→
+    48→// Translation language constants
+    49→type Language = 'pt' | 'en' | 'ja' | 'zh';
+    50→
+    51→const DEFAULT_CIRCLE_RADIUS = 80;
+    52→
+    53→function sanitizeForFilename(text: string): string {
+    54→  return text
+    55→    .trim()
+    56→    .substring(0, 60)
+    57→    .replace(/[<>:"/\\|?*\x00-\x1f]/g, '')
+    58→    .replace(/\s+/g, '_')
+    59→    .replace(/_+/g, '_')
+    60→    .replace(/^_|_$/g, '')
+    61→    || 'export';
+    62→}
+    63→
+    64→function generateReportId(): string {
+    65→  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // No I, O, 0, 1 to avoid confusion
+    66→  let id = 'ZS-';
+    67→  for (let i = 0; i < 6; i++) {
+    68→    id += chars.charAt(Math.floor(Math.random() * chars.length));
+    69→  }
+    70→  return id;
+    71→}
+    72→
+    73→const LANGUAGE_FLAGS: Record<Language, string> = {
+    74→  pt: '🇧🇷',
+    75→  en: '🇺🇸',
+    76→  ja: '🇯🇵',
+    77→  zh: '🇨🇳',
+    78→};
+    79→
+    80→const LANGUAGE_NAMES: Record<Language, string> = {
+    81→  pt: 'Português',
+    82→  en: 'English',
+    83→  ja: '日本語',
+    84→  zh: '中文',
+    85→};
+    86→
+    87→// Tipo para objetos do editor
+    88→interface EditorCircle {
+    89→  id: string;
+    90→  type: 'circle' | 'circleWithPhoto' | 'arrow' | 'rectangle';
+    91→  x: number;
+    92→  y: number;
+    93→  radius?: number;
+    94→  endX?: number;
+    95→  endY?: number;
+    96→  width?: number;
+    97→  height?: number;
+    98→  color: string;
+    99→  imageData?: string;
+   100→}
+   101→
+   102→// Componente de Menu de Ações Mobile
+   103→function MobileActionMenu({
+   104→  onAddPhoto,
+   105→  onDataDialog,
+   106→  onExportDialog,
+   107→  onEmailDialog,
+   108→  onClearConfirm,
+   109→  reportData,
+   110→  reportType,
+   111→  t,
+   112→}: {
+   113→  onAddPhoto: () => void;
+   114→  onDataDialog: () => void;
+   115→  onExportDialog: () => void;
+   116→  onEmailDialog: () => void;
+   117→  onClearConfirm: () => void;
+   118→  reportData: unknown;
+   119→  reportType: 'home' | 'inspecao';
+   120→  t: (key: string, params?: Record<string, string | number>) => string;
+   121→}) {
+   122→  const [isOpen, setIsOpen] = useState(false);
+   123→  const [timeLeft, setTimeLeft] = useState(10);
+   124→  const timerRef = useRef<NodeJS.Timeout | null>(null);
+   125→  const countdownRef = useRef(10);
+   126→
+   127→  useEffect(() => {
+   128→    if (isOpen) {
+   129→      // Reset countdown ref
+   130→      countdownRef.current = 10;
+   131→      
+   132→      timerRef.current = setInterval(() => {
+   133→        countdownRef.current -= 1;
+   134→        const newTime = countdownRef.current;
+   135→        setTimeLeft(newTime);
+   136→        
+   137→        if (newTime <= 0) {
+   138→          setIsOpen(false);
+   139→          if (timerRef.current) {
+   140→            clearInterval(timerRef.current);
+   141→            timerRef.current = null;
+   142→          }
+   143→        }
+   144→      }, 1000);
+   145→      
+   146→      return () => {
+   147→        if (timerRef.current) {
+   148→          clearInterval(timerRef.current);
+   149→          timerRef.current = null;
+   150→        }
+   151→      };
+   152→    }
+   153→  }, [isOpen]);
+   154→
+   155→  const handleAction = (action: () => void) => {
+   156→    action();
+   157→    setIsOpen(false);
+   158→    if (timerRef.current) {
+   159→      clearInterval(timerRef.current);
+   160→      timerRef.current = null;
+   161→    }
+   162→  };
+   163→
+   164→  return (
+   165→    <div className="md:hidden fixed bottom-4 right-4 z-50">
+   166→      {/* Menu expandido */}
+   167→      {isOpen && (
+   168→        <div className="absolute bottom-16 right-0 bg-black/95 backdrop-blur-sm rounded-2xl p-3 shadow-2xl border border-white/10 min-w-[200px]">
+   169→          <div className="text-xs text-white/60 mb-2 text-center">
+   170→            Fechando em {timeLeft}s
+   171→          </div>
+   172→          <div className="grid grid-cols-3 gap-2">
+   173→            <Button 
+   174→              size="icon" 
+   175→              className="rounded-full bg-green-600 hover:bg-green-700 h-12 w-12" 
+   176→              onClick={() => handleAction(onAddPhoto)}
+   177→              title={t('action.addPhoto')}
+   178→            >
+   179→              <Plus className="h-5 w-5" />
+   180→            </Button>
+   181→            <Button 
+   182→              size="icon" 
+   183→              className="rounded-full bg-blue-600 hover:bg-blue-700 h-12 w-12" 
+   184→              onClick={() => handleAction(onDataDialog)}
+   185→              title={t('action.importExport')}
+   186→            >
+   187→              <FileDown className="h-5 w-5" />
+   188→            </Button>
+   189→            <Button 
+   190→              size="icon" 
+   191→              className="rounded-full bg-purple-600 hover:bg-purple-700 h-12 w-12" 
+   192→              onClick={() => handleAction(onExportDialog)}
+   193→              title={t('action.download')}
+   194→            >
+   195→              <Download className="h-5 w-5" />
+   196→            </Button>
+   197→            <Button 
+   198→              size="icon" 
+   199→              className="rounded-full bg-orange-500 hover:bg-orange-600 h-12 w-12" 
+   200→              onClick={() => handleAction(onEmailDialog)}
+   201→              title="Email"
+   202→            >
+   203→              <Mail className="h-5 w-5" />
+   204→            </Button>
+   205→            <Button 
+   206→              size="icon" 
+   207→              className="rounded-full bg-red-600 hover:bg-red-700 h-12 w-12" 
+   208→              onClick={() => handleAction(onClearConfirm)}
+   209→              title={t('action.clear')}
+   210→            >
+   211→              <Trash2 className="h-5 w-5" />
+   212→            </Button>
+   213→          </div>
+   214→        </div>
+   215→      )}
+   216→      
+   217→      {/* Botão principal */}
+   218→      <Button
+   219→        className={`rounded-full h-14 w-14 shadow-lg ${isOpen ? 'bg-red-500 hover:bg-red-600' : 'bg-orange-500 hover:bg-orange-600'}`}
+   220→        onClick={() => setIsOpen(!isOpen)}
+   221→      >
+   222→        {isOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
+   223→      </Button>
+   224→    </div>
+   225→  );
+   226→}
+   227→
+   228→// Componente para visualização em tela cheia
+   229→function FullScreenImageViewer({
+   230→  imageData,
+   231→  onClose,
+   232→  t,
+   233→}: {
+   234→  imageData: string;
+   235→  onClose: () => void;
+   236→  t: (key: string, params?: Record<string, string | number>) => string;
+   237→}) {
+   238→  const handleDownload = () => {
+   239→    const link = document.createElement('a');
+   240→    link.href = imageData;
+   241→    link.download = `photo_${Date.now()}.png`;
+   242→    link.click();
+   243→  };
+   244→
+   245→  return (
+   246→    <div className="fixed inset-0 bg-black/95 z-[100] flex items-center justify-center touch-none">
+   247→      {/* Close button - larger for mobile */}
+   248→      <Button
+   249→        variant="ghost"
+   250→        size="icon"
+   251→        className="absolute top-4 right-4 text-white hover:bg-white/20 z-10 h-12 w-12 md:h-10 md:w-10"
+   252→        onClick={onClose}
+   253→      >
+   254→        <X className="h-7 w-7 md:h-6 md:w-6" />
+   255→      </Button>
+   256→      
+   257→      {/* Download button - larger for mobile */}
+   258→      <Button
+   259→        variant="ghost"
+   260→        size="icon"
+   261→        className="absolute top-4 right-20 md:right-16 text-white hover:bg-white/20 z-10 h-12 w-12 md:h-10 md:w-10"
+   262→        onClick={handleDownload}
+   263→      >
+   264→        <Download className="h-6 w-6 md:h-5 md:w-5" />
+   265→      </Button>
+   266→      
+   267→      {/* Image - pinch to zoom enabled via CSS */}
+   268→      <img
+   269→        src={imageData}
+   270→        alt="Fullscreen"
+   271→        className="max-w-full max-h-full object-contain"
+   272→        onClick={(e) => e.stopPropagation()}
+   273→        style={{ touchAction: 'manipulation' }}
+   274→      />
+   275→      
+   276→      {/* Instructions */}
+   277→      <div className="absolute bottom-6 left-1/2 -translate-x-1/2 text-white/60 text-sm bg-black/50 px-4 py-2 rounded-full">
+   278→        {t('fullscreen.close')}: ESC ou toque no X
+   279→      </div>
+   280→    </div>
+   281→  );
+   282→}
+   283→
+   284→// Componente de opções de foto reutilizável
+   285→function PhotoOptionsDialog({
+   286→  open,
+   287→  onOpenChange,
+   288→  hasImage,
+   289→  onUpload,
+   290→  onCamera,
+   291→  onPaste,
+   292→  onViewFullscreen,
+   293→  t,
+   294→}: {
+   295→  open: boolean;
+   296→  onOpenChange: (open: boolean) => void;
+   297→  hasImage: boolean;
+   298→  onUpload: (file: File) => void;
+   299→  onCamera: () => void;
+   300→  onPaste: () => void;
+   301→  onViewFullscreen?: () => void;
+   302→  t: (key: string, params?: Record<string, string | number>) => string;
+   303→}) {
+   304→  return (
+   305→    <Dialog open={open} onOpenChange={onOpenChange}>
+   306→      <DialogContent className="max-w-[90vw] md:max-w-lg">
+   307→        <DialogHeader>
+   308→          <DialogTitle className="text-lg">{t('photoOptions.title')}</DialogTitle>
+   309→        </DialogHeader>
+   310→        <div className="space-y-2">
+   311→          {/* Ver em tela cheia - só aparece se já tem foto */}
+   312→          {hasImage && onViewFullscreen && (
+   313→            <Button 
+   314→              className="w-full justify-start h-12 md:h-10" 
+   315→              variant="outline"
+   316→              onClick={() => { onViewFullscreen(); onOpenChange(false); }}
+   317→            >
+   318→              <Maximize2 className="h-5 w-5 mr-3" />
+   319→              {t('photoOptions.viewFullscreen')}
+   320→            </Button>
+   321→          )}
+   322→          
+   323→          {/* Upload de arquivo */}
+   324→          <Button 
+   325→            className="w-full justify-start h-12 md:h-10" 
+   326→            variant="outline"
+   327→            onClick={() => {
+   328→              const input = document.createElement('input');
+   329→              input.type = 'file';
+   330→              input.accept = 'image/*';
+   331→              input.onchange = (e) => { 
+   332→                const file = (e.target as HTMLInputElement).files?.[0]; 
+   333→                if (file) { 
+   334→                  onUpload(file); 
+   335→                  onOpenChange(false);
+   336→                } 
+   337→              };
+   338→              input.click();
+   339→            }}
+   340→          >
+   341→            <Upload className="h-5 w-5 mr-3" />
+   342→            {hasImage ? t('photoOptions.replacePhoto') : t('photoOptions.uploadFile')}
+   343→          </Button>
+   344→          
+   345→          {/* Abrir câmera */}
+   346→          <Button 
+   347→            className="w-full justify-start h-12 md:h-10" 
+   348→            variant="outline"
+   349→            onClick={() => { onCamera(); onOpenChange(false); }}
+   350→          >
+   351→            <Camera className="h-5 w-5 mr-3" />
+   352→            {t('photoOptions.openCamera')}
+   353→          </Button>
+   354→          
+   355→          {/* Colar da área de transferência */}
+   356→          <Button 
+   357→            className="w-full justify-start h-12 md:h-10" 
+   358→            variant="outline"
+   359→            onClick={() => { onPaste(); onOpenChange(false); }}
+   360→          >
+   361→            <ClipboardList className="h-5 w-5 mr-3" />
+   362→            {t('photoOptions.pasteClipboard')}
+   363→          </Button>
+   364→        </div>
+   365→      </DialogContent>
+   366→    </Dialog>
+   367→  );
+   368→}
+   369→
+   370→// Componente para a seção de peças adicionais
+   371→function AdditionalPartsSection({
+   372→  parentPn,
+   373→  photoId,
+   374→  additionalParts,
+   375→  onAddPart,
+   376→  onRemovePart,
+   377→  onUpdatePart,
+   378→  t,
+   379→}: {
+   380→  parentPn: string;
+   381→  photoId?: string;
+   382→  additionalParts: AdditionalPart[];
+   383→  onAddPart: (part: AdditionalPart) => void;
+   384→  onRemovePart: (id: string) => void;
+   385→  onUpdatePart?: (id: string, data: Partial<AdditionalPart>) => void;
+   386→  t: (key: string, params?: Record<string, string | number>) => string;
+   387→}) {
+   388→  const [newPn, setNewPn] = useState('');
+   389→  const [newSerialNumber, setNewSerialNumber] = useState('');
+   390→  const [newPartName, setNewPartName] = useState('');
+   391→  const [newQuantity, setNewQuantity] = useState('');
+   392→  const [newCriticality, setNewCriticality] = useState<'Alta' | 'Média' | 'Baixa' | ''>('');
+   393→  const [showExcelPaste, setShowExcelPaste] = useState(false);
+   394→  const [excelPasteData, setExcelPasteData] = useState('');
+   395→
+   396→  const photoAdditionalParts = additionalParts.filter(p =>
+   397→    photoId && p.photoId === photoId
+   398→  );
+   399→
+   400→  const handleAddPart = () => {
+   401→    if (!newPn.trim() || !newPartName.trim() || !newQuantity.trim()) return;
+   402→    
+   403→    onAddPart({
+   404→      id: `add-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+   405→      pn: newPn.trim(),
+   406→      serialNumber: newSerialNumber.trim(),
+   407→      partName: newPartName.trim(),
+   408→      quantity: newQuantity.trim(),
+   409→      criticality: newCriticality,
+   410→      parentPn: parentPn,
+   411→      photoId: photoId || undefined,
+   412→    });
+   413→
+   414→    setNewPn('');
+   415→    setNewSerialNumber('');
+   416→    setNewPartName('');
+   417→    setNewQuantity('');
+   418→    setNewCriticality('');
+   419→  };
+   420→
+   421→  // Processar dados do Excel colados
+   422→  const handlePasteExcel = () => {
+   423→    if (!excelPasteData.trim()) return;
+   424→    
+   425→    // Parse dos dados - formato: Part No.      Q'ty    Part name (tab ou espaços)
+   426→    const lines = excelPasteData.trim().split('\n');
+   427→    
+   428→    lines.forEach((line) => {
+   429→      // Divide por tab ou múltiplos espaços
+   430→      const parts = line.split(/\t+|\s{2,}/).map(p => p.trim()).filter(p => p);
+   431→      
+   432→      if (parts.length >= 3) {
+   433→        const pn = parts[0];
+   434→        const quantity = parts[1];
+   435→        const partName = parts.slice(2).join(' '); // Nome pode ter espaços
+   436→        
+   437→        onAddPart({
+   438→          id: `add-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+   439→          pn: pn,
+   440→          serialNumber: '',
+   441→          partName: partName,
+   442→          quantity: quantity,
+   443→          criticality: '',
+   444→          parentPn: parentPn,
+   445→          photoId: photoId || undefined,
+   446→        });
+   447→      }
+   448→    });
+   449→    
+   450→    setExcelPasteData('');
+   451→    setShowExcelPaste(false);
+   452→  };
+   453→
+   454→  // Get badge color based on criticality
+   455→  const getCriticalityBadge = (criticality: string) => {
+   456→    switch (criticality) {
+   457→      case 'Alta':
+   458→        return <Badge className="bg-red-500 text-white text-xs h-5 px-2">{t('photo.criticalityHigh')}</Badge>;
+   459→      case 'Média':
+   460→        return <Badge className="bg-yellow-500 text-white text-xs h-5 px-2">{t('photo.criticalityMedium')}</Badge>;
+   461→      case 'Baixa':
+   462→        return <Badge className="bg-green-500 text-white text-xs h-5 px-2">{t('photo.criticalityLow')}</Badge>;
+   463→      default:
+   464→        return null;
+   465→    }
+   466→  };
+   467→
+   468→  return (
+   469→    <div className="mt-3 p-3 bg-orange-50 rounded-lg border-2 border-orange-400 space-y-2">
+   470→      <div className="flex items-center justify-between">
+   471→        <Label className="text-sm text-orange-800 font-bold flex items-center gap-2">
+   472→          <ListTree className="h-4 w-4" />
+   473→          {t('subparts.partsOf', { pn: parentPn || '...' })}
+   474→        </Label>
+   475→        <div className="flex items-center gap-1">
+   476→          {photoAdditionalParts.length > 0 && (
+   477→            <Button
+   478→              variant="ghost"
+   479→              size="sm"
+   480→              className="h-7 text-xs text-green-600 hover:text-green-800"
+   481→              onClick={() => exportSubPartsToExcel(photoAdditionalParts, parentPn)}
+   482→            >
+   483→              <FileSpreadsheet className="h-3 w-3 mr-1" /> Baixar Excel
+   484→            </Button>
+   485→          )}
+   486→          <Button
+   487→            variant="ghost"
+   488→            size="sm"
+   489→            className="h-7 text-xs text-orange-600 hover:text-orange-800"
+   490→            onClick={() => setShowExcelPaste(!showExcelPaste)}
+   491→          >
+   492→            {showExcelPaste ? 'Manual' : 'Colar Excel'}
+   493→          </Button>
+   494→        </div>
+   495→      </div>
+   496→      
+   497→      {/* Excel Paste Mode */}
+   498→      {showExcelPaste && (
+   499→        <div className="space-y-2">
+   500→          <p className="text-xs text-orange-700">
+   501→            Cole os dados do Excel no formato: Part No. | Q'ty | Part name (uma linha por peça)
+   502→          </p>
+   503→          <Textarea
+   504→            className="min-h-[80px] text-sm"
+   505→            placeholder="4244836&#9;4&#9;BUCHA&#10;4244837&#9;2&#9;ANEL"
+   506→            value={excelPasteData}
+   507→            onChange={(e) => setExcelPasteData(e.target.value)}
+   508→          />
+   509→          <div className="flex gap-2">
+   510→            <Button
+   511→              size="sm"
+   512→              className="bg-orange-500 hover:bg-orange-600"
+   513→              onClick={handlePasteExcel}
+   514→              disabled={!excelPasteData.trim()}
+   515→            >
+   516→              <Plus className="h-4 w-4 mr-1" /> Adicionar
+   517→            </Button>
+   518→            <Button
+   519→              variant="outline"
+   520→              size="sm"
+   521→              onClick={() => { setExcelPasteData(''); setShowExcelPaste(false); }}
+   522→            >
+   523→              Cancelar
+   524→            </Button>
+   525→          </div>
+   526→        </div>
+   527→      )}
+   528→      
+   529→      {/* Manual Mode */}
+   530→      {!showExcelPaste && (
+   531→        <>
+   532→      
+   533→      {photoAdditionalParts.length > 0 && (
+   534→        <div className="space-y-1 max-h-32 overflow-y-auto">
+   535→          {photoAdditionalParts.map((part) => (
+   536→            <div key={part.id} className="flex items-center gap-2 bg-white p-2 rounded border text-sm">
+   537→              <span className="text-orange-600 font-mono font-bold">└─</span>
+   538→              <span className="font-semibold text-gray-700">{part.pn}</span>
+   539→              {part.serialNumber && (
+   540→                <span className="text-gray-500">({part.serialNumber})</span>
+   541→              )}
+   542→              <span className="text-gray-600 flex-1 truncate">{part.partName}</span>
+   543→              <Badge variant="secondary" className="text-xs h-5 px-2">{t('photo.quantity')}: {part.quantity}</Badge>
+   544→              {getCriticalityBadge(part.criticality)}
+   545→              <Button variant="ghost" size="icon" className="h-8 w-8 text-red-500 hover:text-red-700 min-h-[44px] min-w-[44px] md:min-h-0 md:min-w-0" onClick={() => onRemovePart(part.id)}>
+   546→                <X className="h-4 w-4" />
+   547→              </Button>
+   548→            </div>
+   549→          ))}
+   550→        </div>
+   551→      )}
+   552→
+   553→      {/* Mobile layout - stacked */}
+   554→      <div className="md:hidden space-y-2">
+   555→        <div className="grid grid-cols-2 gap-2">
+   556→          <Input className="h-11 text-base" placeholder="PN" value={newPn} onChange={(e) => setNewPn(e.target.value)} />
+   557→          <Input className="h-11 text-base" placeholder={t('photo.serialPlaceholder')} value={newSerialNumber} onChange={(e) => setNewSerialNumber(e.target.value)} />
+   558→        </div>
+   559→        <Input className="h-11 text-base" placeholder={t('photo.partNamePlaceholder')} value={newPartName} onChange={(e) => setNewPartName(e.target.value)} />
+   560→        <div className="grid grid-cols-2 gap-2">
+   561→          <Input className="h-11 text-base" placeholder={t('photo.quantityPlaceholder')} type="number" value={newQuantity} onChange={(e) => setNewQuantity(e.target.value)} />
+   562→          <Select value={newCriticality} onValueChange={(v) => setNewCriticality(v as 'Alta' | 'Média' | 'Baixa' | '')}>
+   563→            <SelectTrigger className="h-11 text-base">
+   564→              <SelectValue placeholder={t('photo.criticality')} />
+   565→            </SelectTrigger>
+   566→            <SelectContent>
+   567→              <SelectItem value="Alta">{t('photo.criticalityHigh')}</SelectItem>
+   568→              <SelectItem value="Média">{t('photo.criticalityMedium')}</SelectItem>
+   569→              <SelectItem value="Baixa">{t('photo.criticalityLow')}</SelectItem>
+   570→            </SelectContent>
+   571→          </Select>
+   572→        </div>
+   573→        <Button size="lg" className="w-full h-12 bg-orange-500 hover:bg-orange-600" onClick={handleAddPart} disabled={!newPn.trim() || !newPartName.trim() || !newQuantity.trim()}>
+   574→          <Plus className="h-5 w-5 mr-2" /> {t('action.add')}
+   575→        </Button>
+   576→      </div>
+   577→
+   578→      {/* Desktop layout - inline grid */}
+   579→      <div className="hidden md:grid grid-cols-12 gap-2">
+   580→        <Input className="h-8 text-sm col-span-2" placeholder="PN" value={newPn} onChange={(e) => setNewPn(e.target.value)} />
+   581→        <Input className="h-8 text-sm col-span-2" placeholder={t('photo.serialPlaceholder')} value={newSerialNumber} onChange={(e) => setNewSerialNumber(e.target.value)} />
+   582→        <Input className="h-8 text-sm col-span-2" placeholder={t('photo.partNamePlaceholder')} value={newPartName} onChange={(e) => setNewPartName(e.target.value)} />
+   583→        <Input className="h-8 text-sm col-span-2" placeholder={t('photo.quantityPlaceholder')} type="number" value={newQuantity} onChange={(e) => setNewQuantity(e.target.value)} />
+   584→        <Select value={newCriticality} onValueChange={(v) => setNewCriticality(v as 'Alta' | 'Média' | 'Baixa' | '')}>
+   585→          <SelectTrigger className="h-8 text-xs col-span-2">
+   586→            <SelectValue placeholder={t('photo.criticality')} />
+   587→          </SelectTrigger>
+   588→          <SelectContent>
+   589→            <SelectItem value="Alta">{t('photo.criticalityHigh')}</SelectItem>
+   590→            <SelectItem value="Média">{t('photo.criticalityMedium')}</SelectItem>
+   591→            <SelectItem value="Baixa">{t('photo.criticalityLow')}</SelectItem>
+   592→          </SelectContent>
+   593→        </Select>
+   594→        <Button size="icon" className="h-8 w-8 bg-orange-500 hover:bg-orange-600 col-span-2" onClick={handleAddPart} disabled={!newPn.trim() || !newPartName.trim() || !newQuantity.trim()}>
+   595→          <Plus className="h-4 w-4" />
+   596→        </Button>
+   597→      </div>
+   598→        </>
+   599→      )}
+   600→    </div>
+   601→  );
+   602→}
+   603→
+   604→// Tipo para modo de edição de foto
+   605→type PhotoEditMode = 'primary' | 'secondary' | 'dual';
+   606→
+   607→// Editor de Foto
+   608→function PhotoEditor({
+   609→  photo,
+   610→  editMode = 'primary',
+   611→  onSave,
+   612→  onClose,
+   613→  t,
+   614→}: {
+   615→  photo: PhotoData;
+   616→  editMode?: PhotoEditMode;
+   617→  onSave: (data: Partial<PhotoData>) => void;
+   618→  onClose: () => void;
+   619→  t: (key: string, params?: Record<string, string | number>) => string;
+   620→}) {
+   621→  const canvasRef = useRef<HTMLCanvasElement>(null);
+   622→  const containerRef = useRef<HTMLDivElement>(null);
+   623→  const imgRef = useRef<HTMLImageElement | null>(null);
+   624→  
+   625→  const [objects, setObjects] = useState<EditorCircle[]>(() => {
+   626→    return (photo.embeddedPhotos || []).map(ep => ({
+   627→      id: ep.id,
+   628→      type: 'circleWithPhoto' as const,
+   629→      x: ep.circleX,
+   630→      y: ep.circleY,
+   631→      radius: ep.circleRadius,
+   632→      color: '#f97316',
+   633→      imageData: ep.imageData,
+   634→    }));
+   635→  });
+   636→  
+   637→  const [currentTool, setCurrentTool] = useState<'select' | 'circle' | 'circlePhoto' | 'arrow' | 'rectangle'>('select');
+   638→  const [selectedObjectId, setSelectedObjectId] = useState<string | null>(null);
+   639→  const [isDragging, setIsDragging] = useState(false);
+   640→  const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
+   641→  const [currentColor, setCurrentColor] = useState('#f97316');
+   642→  const [circleRadius, setCircleRadius] = useState(80);
+   643→  const [showAddPhotoDialog, setShowAddPhotoDialog] = useState(false);
+   644→  const [pendingPhotoCircle, setPendingPhotoCircle] = useState<EditorCircle | null>(null);
+   645→  const [isDrawingArrow, setIsDrawingArrow] = useState(false);
+   646→  const [arrowStart, setArrowStart] = useState<{ x: number; y: number } | null>(null);
+   647→  const [arrowPreview, setArrowPreview] = useState<{ x: number; y: number } | null>(null);
+   648→  const [isDrawingCircle, setIsDrawingCircle] = useState(false);
+   649→  const [circleStart, setCircleStart] = useState<{ x: number; y: number } | null>(null);
+   650→  const [circlePreview, setCirclePreview] = useState<{ x: number; y: number; radius: number } | null>(null);
+   651→  const [isDrawingRect, setIsDrawingRect] = useState(false);
+   652→  const [rectStart, setRectStart] = useState<{ x: number; y: number } | null>(null);
+   653→  const [rectPreview, setRectPreview] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
+   654→  const [rotation, setRotation] = useState(0);
+   655→
+   656→  // Determinar qual imagem editar baseado no modo
+   657→  const getActiveImageSrc = () => {
+   658→    if (editMode === 'secondary') {
+   659→      return photo.secondaryImageData;
+   660→    }
+   661→    if (editMode === 'dual' && photo.imageData && photo.secondaryImageData) {
+   662→      // Criar imagem combinada lado a lado
+   663→      return null; // Será tratado separadamente
+   664→    }
+   665→    return photo.editedImageData || photo.imageData;
+   666→  };
+   667→  
+   668→  const imageSrc = getActiveImageSrc();
+   669→  const [dualCanvasSize, setDualCanvasSize] = useState<{ width: number; height: number } | null>(null);
+   670→  const [canvasSize, setCanvasSize] = useState({ width: 0, height: 0, scale: 1 });
+   671→
+   672→  useEffect(() => {
+   673→    const container = containerRef.current;
+   674→    if (!container) return;
+   675→    const containerWidth = Math.min(container.clientWidth - 32, 900);
+   676→    const containerHeight = 500;
+   677→
+   678→    // Modo duplo: carregar ambas as imagens lado a lado
+   679→    if (editMode === 'dual' && photo.imageData && photo.secondaryImageData) {
+   680→      const img1 = new window.Image();
+   681→      const img2 = new window.Image();
+   682→      
+   683→      let loaded = 0;
+   684→      const checkLoaded = () => {
+   685→        loaded++;
+   686→        if (loaded === 2) {
+   687→          // Calcular dimensões para ambas as imagens lado a lado
+   688→          const halfWidth = containerWidth / 2 - 10;
+   689→          const scale1 = Math.min(halfWidth / img1.width, containerHeight / img1.height);
+   690→          const scale2 = Math.min(halfWidth / img2.width, containerHeight / img2.height);
+   691→          const scale = Math.min(scale1, scale2);
+   692→          
+   693→          const totalWidth = (img1.width + img2.width) * scale + 10;
+   694→          const totalHeight = Math.max(img1.height, img2.height) * scale;
+   695→          
+   696→          setCanvasSize({ width: totalWidth, height: totalHeight, scale });
+   697→          setDualCanvasSize({ width: img1.width * scale, height: img1.height * scale });
+   698→          
+   699→          // Criar imagem combinada temporária
+   700→          const tempCanvas = document.createElement('canvas');
+   701→          tempCanvas.width = img1.width + img2.width;
+   702→          tempCanvas.height = Math.max(img1.height, img2.height);
+   703→          const ctx = tempCanvas.getContext('2d');
+   704→          if (ctx) {
+   705→            ctx.drawImage(img1, 0, 0);
+   706→            ctx.drawImage(img2, img1.width, 0);
+   707→          }
+   708→          
+   709→          const combinedImg = new window.Image();
+   710→          combinedImg.onload = () => {
+   711→            imgRef.current = combinedImg;
+   712→          };
+   713→          combinedImg.src = tempCanvas.toDataURL('image/png');
+   714→        }
+   715→      };
+   716→      
+   717→      img1.onload = checkLoaded;
+   718→      img2.onload = checkLoaded;
+   719→      img1.src = photo.imageData;
+   720→      img2.src = photo.secondaryImageData;
+   721→      return;
+   722→    }
+   723→
+   724→    // Modo normal (primário ou secundário)
+   725→    if (!imageSrc) return;
+   726→    const img = new window.Image();
+   727→    img.onload = () => {
+   728→      imgRef.current = img;
+   729→      let imgWidth = img.width;
+   730→      let imgHeight = img.height;
+   731→      // Swap dimensions for 90/270 degree rotation
+   732→      if (rotation === 90 || rotation === 270) {
+   733→        [imgWidth, imgHeight] = [imgHeight, imgWidth];
+   734→      }
+   735→      const scale = Math.min(containerWidth / imgWidth, containerHeight / imgHeight);
+   736→      setCanvasSize({ width: imgWidth * scale, height: imgHeight * scale, scale });
+   737→    };
+   738→    img.src = imageSrc;
+   739→  }, [imageSrc, editMode, photo.imageData, photo.secondaryImageData, rotation]);
+   740→
+   741→  const drawCanvas = useCallback(() => {
+   742→    const canvas = canvasRef.current;
+   743→    const img = imgRef.current;
+   744→    if (!canvas || !img || !imageSrc) return;
+   745→
+   746→    const ctx = canvas.getContext('2d');
+   747→    if (!ctx) return;
+   748→
+   749→    const { width, height, scale } = canvasSize;
+   750→    canvas.width = width;
+   751→    canvas.height = height;
+   752→    ctx.save();
+   753→    if (rotation > 0) {
+   754→      ctx.translate(width / 2, height / 2);
+   755→      ctx.rotate((rotation * Math.PI) / 180);
+   756→      ctx.translate(-width / 2, -height / 2);
+   757→    }
+   758→    ctx.drawImage(img, 0, 0, width, height);
+   759→    ctx.restore();
+   760→
+   761→    objects.forEach((obj) => {
+   762→      const isSelected = obj.id === selectedObjectId;
+   763→      
+   764→      if (obj.type === 'circle' || obj.type === 'circleWithPhoto') {
+   765→        const x = obj.x * scale;
+   766→        const y = obj.y * scale;
+   767→        const radius = (obj.radius || 50) * scale;
+   768→
+   769→        if (obj.type === 'circleWithPhoto' && obj.imageData) {
+   770→          const embeddedImg = new window.Image();
+   771→          embeddedImg.onload = () => {
+   772→            ctx.save();
+   773→            ctx.beginPath();
+   774→            ctx.arc(x, y, radius - 2, 0, Math.PI * 2);
+   775→            ctx.closePath();
+   776→            ctx.clip();
+   777→            ctx.drawImage(embeddedImg, x - radius + 2, y - radius + 2, (radius - 2) * 2, (radius - 2) * 2);
+   778→            ctx.restore();
+   779→            ctx.beginPath();
+   780→            ctx.arc(x, y, radius, 0, Math.PI * 2);
+   781→            ctx.strokeStyle = obj.color;
+   782→            ctx.lineWidth = isSelected ? 4 : 3;
+   783→            ctx.stroke();
+   784→          };
+   785→          embeddedImg.src = obj.imageData;
+   786→        } else {
+   787→          ctx.beginPath();
+   788→          ctx.arc(x, y, radius, 0, Math.PI * 2);
+   789→          ctx.strokeStyle = obj.color;
+   790→          ctx.lineWidth = isSelected ? 4 : 3;
+   791→          ctx.stroke();
+   792→        }
+   793→      }
+   794→      
+   795→      if (obj.type === 'arrow') {
+   796→        const startX = obj.x * scale;
+   797→        const startY = obj.y * scale;
+   798→        const endX = (obj.endX || obj.x + 50) * scale;
+   799→        const endY = (obj.endY || obj.y + 50) * scale;
+   800→
+   801→        ctx.beginPath();
+   802→        ctx.moveTo(startX, startY);
+   803→        ctx.lineTo(endX, endY);
+   804→        ctx.strokeStyle = obj.color;
+   805→        ctx.lineWidth = isSelected ? 4 : 3;
+   806→        ctx.stroke();
+   807→
+   808→        const angle = Math.atan2(endY - startY, endX - startX);
+   809→        ctx.beginPath();
+   810→        ctx.moveTo(endX, endY);
+   811→        ctx.lineTo(endX - 15 * Math.cos(angle - Math.PI / 6), endY - 15 * Math.sin(angle - Math.PI / 6));
+   812→        ctx.moveTo(endX, endY);
+   813→        ctx.lineTo(endX - 15 * Math.cos(angle + Math.PI / 6), endY - 15 * Math.sin(angle + Math.PI / 6));
+   814→        ctx.stroke();
+   815→      }
+   816→    });
+   817→
+   818→    // Rectangle objects
+   819→    objects.forEach((obj) => {
+   820→      if (obj.type === 'rectangle') {
+   821→        const isSelected = obj.id === selectedObjectId;
+   822→        const rx = obj.x * scale;
+   823→        const ry = obj.y * scale;
+   824→        const rw = (obj.width || 100) * scale;
+   825→        const rh = (obj.height || 80) * scale;
+   826→        ctx.strokeStyle = obj.color;
+   827→        ctx.lineWidth = isSelected ? 4 : 3;
+   828→        ctx.strokeRect(rx, ry, rw, rh);
+   829→      }
+   830→    });
+   831→
+   832→    if (isDrawingArrow && arrowStart && arrowPreview) {
+   833→      ctx.beginPath();
+   834→      ctx.moveTo(arrowStart.x * scale, arrowStart.y * scale);
+   835→      ctx.lineTo(arrowPreview.x * scale, arrowPreview.y * scale);
+   836→      ctx.strokeStyle = currentColor;
+   837→      ctx.lineWidth = 3;
+   838→      ctx.setLineDash([5, 5]);
+   839→      ctx.stroke();
+   840→      ctx.setLineDash([]);
+   841→    }
+   842→
+   843→    // Circle drag preview
+   844→    if (isDrawingCircle && circleStart && circlePreview) {
+   845→      ctx.beginPath();
+   846→      ctx.arc(circlePreview.x * scale, circlePreview.y * scale, circlePreview.radius * scale, 0, Math.PI * 2);
+   847→      ctx.strokeStyle = currentColor;
+   848→      ctx.lineWidth = 3;
+   849→      ctx.setLineDash([5, 5]);
+   850→      ctx.stroke();
+   851→      ctx.setLineDash([]);
+   852→    }
+   853→
+   854→    // Rectangle drag preview
+   855→    if (isDrawingRect && rectStart && rectPreview) {
+   856→      ctx.strokeStyle = currentColor;
+   857→      ctx.lineWidth = 3;
+   858→      ctx.setLineDash([5, 5]);
+   859→      ctx.strokeRect(rectPreview.x * scale, rectPreview.y * scale, rectPreview.w * scale, rectPreview.h * scale);
+   860→      ctx.setLineDash([]);
+   861→    }
+   862→  }, [imageSrc, canvasSize, objects, selectedObjectId, isDrawingArrow, arrowStart, arrowPreview, currentColor, rotation, isDrawingCircle, circleStart, circlePreview, isDrawingRect, rectStart, rectPreview]);
+   863→
+   864→  useEffect(() => {
+   865→    drawCanvas();
+   866→  }, [drawCanvas]);
+   867→
+   868→  const getMousePos = (e: React.MouseEvent): { x: number; y: number } => {
+   869→    const canvas = canvasRef.current;
+   870→    if (!canvas) return { x: 0, y: 0 };
+   871→    const rect = canvas.getBoundingClientRect();
+   872→    return { x: (e.clientX - rect.left) / canvasSize.scale, y: (e.clientY - rect.top) / canvasSize.scale };
+   873→  };
+   874→
+   875→  // Touch position helper for mobile
+   876→  const getTouchPos = (e: React.TouchEvent): { x: number; y: number } => {
+   877→    const canvas = canvasRef.current;
+   878→    if (!canvas || e.touches.length === 0) return { x: 0, y: 0 };
+   879→    const rect = canvas.getBoundingClientRect();
+   880→    const touch = e.touches[0];
+   881→    return { x: (touch.clientX - rect.left) / canvasSize.scale, y: (touch.clientY - rect.top) / canvasSize.scale };
+   882→  };
+   883→
+   884→  const findObjectAtPosition = (x: number, y: number): EditorCircle | null => {
+   885→    for (let i = objects.length - 1; i >= 0; i--) {
+   886→      const obj = objects[i];
+   887→      if (obj.type === 'circle' || obj.type === 'circleWithPhoto') {
+   888→        const dist = Math.sqrt((x - obj.x) ** 2 + (y - obj.y) ** 2);
+   889→        if (dist <= (obj.radius || 50)) return obj;
+   890→      }
+   891→      if (obj.type === 'arrow') {
+   892→        const lineLength = Math.sqrt((obj.endX! - obj.x) ** 2 + (obj.endY! - obj.y) ** 2);
+   893→        const d1 = Math.sqrt((x - obj.x) ** 2 + (y - obj.y) ** 2);
+   894→        const d2 = Math.sqrt((x - obj.endX!) ** 2 + (y - obj.endY!) ** 2);
+   895→        if (d1 + d2 <= lineLength + 15) return obj;
+   896→      }
+   897→      if (obj.type === 'rectangle') {
+   898→        const rx = Math.min(obj.x, obj.x + (obj.width || 100));
+   899→        const ry = Math.min(obj.y, obj.y + (obj.height || 80));
+   900→        const rw = Math.abs(obj.width || 100);
+   901→        const rh = Math.abs(obj.height || 80);
+   902→        if (x >= rx - 10 && x <= rx + rw + 10 && y >= ry - 10 && y <= ry + rh + 10) return obj;
+   903→      }
+   904→    }
+   905→    return null;
+   906→  };
+   907→
+   908→  const handleMouseDown = (e: React.MouseEvent) => {
+   909→    const pos = getMousePos(e);
+   910→    if (currentTool === 'select') {
+   911→      const obj = findObjectAtPosition(pos.x, pos.y);
+   912→      if (obj) {
+   913→        setSelectedObjectId(obj.id);
+   914→        setIsDragging(true);
+   915→        setDragOffset({ x: pos.x - obj.x, y: pos.y - obj.y });
+   916→      } else {
+   917→        setSelectedObjectId(null);
+   918→      }
+   919→    } else if (currentTool === 'circle') {
+   920→      setIsDrawingCircle(true);
+   921→      setCircleStart(pos);
+   922→      setCirclePreview({ x: pos.x, y: pos.y, radius: 5 });
+   923→    } else if (currentTool === 'circlePhoto') {
+   924→      setPendingPhotoCircle({ id: `cp-${Date.now()}`, type: 'circleWithPhoto', x: pos.x, y: pos.y, radius: circleRadius, color: currentColor });
+   925→      setShowAddPhotoDialog(true);
+   926→    } else if (currentTool === 'arrow') {
+   927→      setIsDrawingArrow(true);
+   928→      setArrowStart(pos);
+   929→      setArrowPreview(pos);
+   930→    } else if (currentTool === 'rectangle') {
+   931→      setIsDrawingRect(true);
+   932→      setRectStart(pos);
+   933→      setRectPreview({ x: pos.x, y: pos.y, w: 1, h: 1 });
+   934→    }
+   935→  };
+   936→
+   937→  const handleMouseMove = (e: React.MouseEvent) => {
+   938→    const pos = getMousePos(e);
+   939→    if (isDragging && selectedObjectId) {
+   940→      setObjects(prev => prev.map(obj => {
+   941→        if (obj.id !== selectedObjectId) return obj;
+   942→        const newX = pos.x - dragOffset.x;
+   943→        const newY = pos.y - dragOffset.y;
+   944→        if (obj.type === 'arrow') {
+   945→          const dx = obj.endX! - obj.x;
+   946→          const dy = obj.endY! - obj.y;
+   947→          return { ...obj, x: newX, y: newY, endX: newX + dx, endY: newY + dy };
+   948→        }
+   949→        if (obj.type === 'rectangle') {
+   950→          return { ...obj, x: newX, y: newY };
+   951→        }
+   952→        return { ...obj, x: newX, y: newY };
+   953→      }));
+   954→    }
+   955→    if (isDrawingArrow) setArrowPreview(pos);
+   956→    if (isDrawingCircle && circleStart) {
+   957→      const dist = Math.sqrt((pos.x - circleStart.x) ** 2 + (pos.y - circleStart.y) ** 2);
+   958→      setCirclePreview({ x: circleStart.x, y: circleStart.y, radius: dist });
+   959→    }
+   960→    if (isDrawingRect && rectStart) {
+   961→      setRectPreview({ x: rectStart.x, y: rectStart.y, w: pos.x - rectStart.x, h: pos.y - rectStart.y });
+   962→    }
+   963→  };
+   964→
+   965→  const handleMouseUp = (e: React.MouseEvent) => {
+   966→    const pos = getMousePos(e);
+   967→    if (isDragging) setIsDragging(false);
+   968→    if (isDrawingCircle && circleStart && currentTool === 'circle') {
+   969→      const dist = Math.sqrt((pos.x - circleStart.x) ** 2 + (pos.y - circleStart.y) ** 2);
+   970→      const finalRadius = dist > 10 ? dist : circleRadius;
+   971→      const newCircle: EditorCircle = { id: `circle-${Date.now()}`, type: 'circle', x: circleStart.x, y: circleStart.y, radius: finalRadius, color: currentColor };
+   972→      setObjects(prev => [...prev, newCircle]);
+   973→      setSelectedObjectId(newCircle.id);
+   974→      setIsDrawingCircle(false);
+   975→      setCircleStart(null);
+   976→      setCirclePreview(null);
+   977→      setCurrentTool('select');
+   978→    }
+   979→    if (isDrawingRect && rectStart && currentTool === 'rectangle') {
+   980→      const w = pos.x - rectStart.x;
+   981→      const h = pos.y - rectStart.y;
+   982→      if (Math.abs(w) > 10 && Math.abs(h) > 10) {
+   983→        const newRect: EditorCircle = { id: `rect-${Date.now()}`, type: 'rectangle', x: rectStart.x, y: rectStart.y, width: w, height: h, color: currentColor };
+   984→        setObjects(prev => [...prev, newRect]);
+   985→        setSelectedObjectId(newRect.id);
+   986→      }
+   987→      setIsDrawingRect(false);
+   988→      setRectStart(null);
+   989→      setRectPreview(null);
+   990→      setCurrentTool('select');
+   991→    }
+   992→    if (isDrawingArrow && arrowStart && currentTool === 'arrow') {
+   993→      const distance = Math.sqrt((pos.x - arrowStart.x) ** 2 + (pos.y - arrowStart.y) ** 2);
+   994→      if (distance > 10) {
+   995→        const newArrow: EditorCircle = { id: `arrow-${Date.now()}`, type: 'arrow', x: arrowStart.x, y: arrowStart.y, endX: pos.x, endY: pos.y, color: currentColor };
+   996→        setObjects(prev => [...prev, newArrow]);
+   997→        setSelectedObjectId(newArrow.id);
+   998→      }
+   999→      setIsDrawingArrow(false);
+  1000→      setArrowStart(null);
+  1001→      setArrowPreview(null);
+  1002→      setCurrentTool('select');
+  1003→    }
+  1004→  };
+  1005→
+  1006→  // Touch event handlers for mobile
+  1007→  const handleTouchStart = (e: React.TouchEvent) => {
+  1008→    e.preventDefault();
+  1009→    const pos = getTouchPos(e);
+  1010→    if (currentTool === 'select') {
+  1011→      const obj = findObjectAtPosition(pos.x, pos.y);
+  1012→      if (obj) {
+  1013→        setSelectedObjectId(obj.id);
+  1014→        setIsDragging(true);
+  1015→        setDragOffset({ x: pos.x - obj.x, y: pos.y - obj.y });
+  1016→      } else {
+  1017→        setSelectedObjectId(null);
+  1018→      }
+  1019→    } else if (currentTool === 'circle') {
+  1020→      setIsDrawingCircle(true);
+  1021→      setCircleStart(pos);
+  1022→      setCirclePreview({ x: pos.x, y: pos.y, radius: 5 });
+  1023→    } else if (currentTool === 'circlePhoto') {
+  1024→      setPendingPhotoCircle({ id: `cp-${Date.now()}`, type: 'circleWithPhoto', x: pos.x, y: pos.y, radius: circleRadius, color: currentColor });
+  1025→      setShowAddPhotoDialog(true);
+  1026→    } else if (currentTool === 'arrow') {
+  1027→      setIsDrawingArrow(true);
+  1028→      setArrowStart(pos);
+  1029→      setArrowPreview(pos);
+  1030→    } else if (currentTool === 'rectangle') {
+  1031→      setIsDrawingRect(true);
+  1032→      setRectStart(pos);
+  1033→      setRectPreview({ x: pos.x, y: pos.y, w: 1, h: 1 });
+  1034→    }
+  1035→  };
+  1036→
+  1037→  const handleTouchMove = (e: React.TouchEvent) => {
+  1038→    e.preventDefault();
+  1039→    const pos = getTouchPos(e);
+  1040→    if (isDragging && selectedObjectId) {
+  1041→      setObjects(prev => prev.map(obj => {
+  1042→        if (obj.id !== selectedObjectId) return obj;
+  1043→        const newX = pos.x - dragOffset.x;
+  1044→        const newY = pos.y - dragOffset.y;
+  1045→        if (obj.type === 'arrow') {
+  1046→          const dx = obj.endX! - obj.x;
+  1047→          const dy = obj.endY! - obj.y;
+  1048→          return { ...obj, x: newX, y: newY, endX: newX + dx, endY: newY + dy };
+  1049→        }
+  1050→        if (obj.type === 'rectangle') {
+  1051→          return { ...obj, x: newX, y: newY };
+  1052→        }
+  1053→        return { ...obj, x: newX, y: newY };
+  1054→      }));
+  1055→    }
+  1056→    if (isDrawingArrow) setArrowPreview(pos);
+  1057→    if (isDrawingCircle && circleStart) {
+  1058→      const dist = Math.sqrt((pos.x - circleStart.x) ** 2 + (pos.y - circleStart.y) ** 2);
+  1059→      setCirclePreview({ x: circleStart.x, y: circleStart.y, radius: dist });
+  1060→    }
+  1061→    if (isDrawingRect && rectStart) {
+  1062→      setRectPreview({ x: rectStart.x, y: rectStart.y, w: pos.x - rectStart.x, h: pos.y - rectStart.y });
+  1063→    }
+  1064→  };
+  1065→
+  1066→  const handleTouchEnd = (e: React.TouchEvent) => {
+  1067→    e.preventDefault();
+  1068→    if (isDragging) setIsDragging(false);
+  1069→    if (isDrawingCircle && circleStart && currentTool === 'circle') {
+  1070→      const pos = circlePreview || circleStart;
+  1071→      const dist = Math.sqrt((pos.x - circleStart.x) ** 2 + (pos.y - circleStart.y) ** 2);
+  1072→      const finalRadius = dist > 10 ? dist : circleRadius;
+  1073→      const newCircle: EditorCircle = { id: `circle-${Date.now()}`, type: 'circle', x: circleStart.x, y: circleStart.y, radius: finalRadius, color: currentColor };
+  1074→      setObjects(prev => [...prev, newCircle]);
+  1075→      setSelectedObjectId(newCircle.id);
+  1076→      setIsDrawingCircle(false);
+  1077→      setCircleStart(null);
+  1078→      setCirclePreview(null);
+  1079→      setCurrentTool('select');
+  1080→    }
+  1081→    if (isDrawingRect && rectStart && currentTool === 'rectangle') {
+  1082→      const preview = rectPreview || { x: rectStart.x, y: rectStart.y, w: 0, h: 0 };
+  1083→      if (Math.abs(preview.w) > 10 && Math.abs(preview.h) > 10) {
+  1084→        const newRect: EditorCircle = { id: `rect-${Date.now()}`, type: 'rectangle', x: rectStart.x, y: rectStart.y, width: preview.w, height: preview.h, color: currentColor };
+  1085→        setObjects(prev => [...prev, newRect]);
+  1086→        setSelectedObjectId(newRect.id);
+  1087→      }
+  1088→      setIsDrawingRect(false);
+  1089→      setRectStart(null);
+  1090→      setRectPreview(null);
+  1091→      setCurrentTool('select');
+  1092→    }
+  1093→    if (isDrawingArrow && arrowStart && currentTool === 'arrow') {
+  1094→      const pos = arrowPreview || arrowStart;
+  1095→      const distance = Math.sqrt((pos.x - arrowStart.x) ** 2 + (pos.y - arrowStart.y) ** 2);
+  1096→      if (distance > 10) {
+  1097→        const newArrow: EditorCircle = { id: `arrow-${Date.now()}`, type: 'arrow', x: arrowStart.x, y: arrowStart.y, endX: pos.x, endY: pos.y, color: currentColor };
+  1098→        setObjects(prev => [...prev, newArrow]);
+  1099→        setSelectedObjectId(newArrow.id);
+  1100→      }
+  1101→      setIsDrawingArrow(false);
+  1102→      setArrowStart(null);
+  1103→      setArrowPreview(null);
+  1104→      setCurrentTool('select');
+  1105→    }
+  1106→  };
+  1107→
+  1108→  const handleAddPhotoToCircle = (file: File) => {
+  1109→    if (!pendingPhotoCircle) return;
+  1110→    const reader = new FileReader();
+  1111→    reader.onload = (e) => {
+  1112→      const imageData = e.target?.result as string;
+  1113→      setObjects(prev => [...prev, { ...pendingPhotoCircle, imageData }]);
+  1114→      setPendingPhotoCircle(null);
+  1115→      setShowAddPhotoDialog(false);
+  1116→      setCurrentTool('select');
+  1117→    };
+  1118→    reader.readAsDataURL(file);
+  1119→  };
+  1120→
+  1121→  const deleteSelected = () => {
+  1122→    if (selectedObjectId) {
+  1123→      setObjects(prev => prev.filter(obj => obj.id !== selectedObjectId));
+  1124→      setSelectedObjectId(null);
+  1125→    }
+  1126→  };
+  1127→
+  1128→  const resizeSelected = (delta: number) => {
+  1129→    if (selectedObjectId) {
+  1130→      setObjects(prev => prev.map(obj => {
+  1131→        if (obj.id !== selectedObjectId) return obj;
+  1132→        if (obj.type === 'rectangle') {
+  1133→          return { ...obj, width: Math.max(20, (obj.width || 100) + delta * 1.5), height: Math.max(20, (obj.height || 80) + delta * 1.5) };
+  1134→        }
+  1135→        if (!obj.radius) return obj;
+  1136→        return { ...obj, radius: Math.max(20, Math.min(200, obj.radius + delta)) };
+  1137→      }));
+  1138→    }
+  1139→  };
+  1140→
+  1141→  const handleSave = () => {
+  1142→    const embeddedPhotos: EmbeddedPhoto[] = objects.filter(obj => obj.type === 'circleWithPhoto' && obj.imageData).map(obj => ({ id: obj.id, circleX: obj.x, circleY: obj.y, circleRadius: obj.radius || 50, imageData: obj.imageData! }));
+  1143→    
+  1144→    // Exportar canvas como imagem editada
+  1145→    const canvas = canvasRef.current;
+  1146→    if (canvas) {
+  1147→      try {
+  1148→        const canvasData = canvas.toDataURL('image/png');
+  1149→        if (editMode === 'secondary') {
+  1150→          onSave({ embeddedPhotos, secondaryImageData: canvasData });
+  1151→        } else {
+  1152→          onSave({ embeddedPhotos, editedImageData: canvasData });
+  1153→        }
+  1154→      } catch (error) {
+  1155→        console.error('Error exporting canvas:', error);
+  1156→        onSave({ embeddedPhotos });
+  1157→      }
+  1158→    } else {
+  1159→      onSave({ embeddedPhotos });
+  1160→    }
+  1161→    onClose();
+  1162→  };
+  1163→
+  1164→  useEffect(() => {
+  1165→    const handleKeyDown = (e: KeyboardEvent) => {
+  1166→      if ((e.key === 'Delete' || e.key === 'Backspace') && selectedObjectId && !showAddPhotoDialog) { e.preventDefault(); deleteSelected(); }
+  1167→      if (e.key === 'Escape') { setSelectedObjectId(null); setCurrentTool('select'); }
+  1168→    };
+  1169→    window.addEventListener('keydown', handleKeyDown);
+  1170→    return () => window.removeEventListener('keydown', handleKeyDown);
+  1171→  }, [selectedObjectId, showAddPhotoDialog]);
+  1172→
+  1173→  return (
+  1174→    <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-2 md:p-4">
+  1175→      <div className="bg-white rounded-lg max-w-5xl w-full max-h-[95vh] overflow-hidden flex flex-col">
+  1176→        <div className="flex items-center justify-between p-3 md:p-4 border-b">
+  1177→          <h3 className="text-base md:text-lg font-semibold flex items-center gap-2"><Edit className="h-4 w-4 md:h-5 md:w-5 text-orange-500" />Editor de Foto</h3>
+  1178→          <Button variant="ghost" size="icon" className="h-10 w-10 md:h-8 md:w-8" onClick={onClose}><X className="h-5 w-5 md:h-4 md:w-4" /></Button>
+  1179→        </div>
+  1180→        
+  1181→        {/* Mobile Tools - Horizontal scroll */}
+  1182→        <div className="md:hidden flex items-center gap-2 p-2 border-b bg-gray-50 overflow-x-auto">
+  1183→          <div className="flex items-center gap-1 flex-shrink-0">
+  1184→            <Button variant={currentTool === 'select' ? "default" : "outline"} size="sm" className={`h-10 w-10 p-0 ${currentTool === 'select' ? "bg-orange-500 hover:bg-orange-600" : ""}`} onClick={() => setCurrentTool('select')}><MousePointer className="h-5 w-5" /></Button>
+  1185→            <Button variant={currentTool === 'circle' ? "default" : "outline"} size="sm" className={`h-10 w-10 p-0 ${currentTool === 'circle' ? "bg-orange-500 hover:bg-orange-600" : ""}`} onClick={() => setCurrentTool('circle')}><Circle className="h-5 w-5" /></Button>
+  1186→            <Button variant={currentTool === 'circlePhoto' ? "default" : "outline"} size="sm" className={`h-10 w-10 p-0 ${currentTool === 'circlePhoto' ? "bg-orange-500 hover:bg-orange-600" : ""}`} onClick={() => setCurrentTool('circlePhoto')}><div className="relative"><Circle className="h-5 w-5" /><Camera className="h-3 w-3 absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2" /></div></Button>
+  1187→            <Button variant={currentTool === 'arrow' ? "default" : "outline"} size="sm" className={`h-10 w-10 p-0 ${currentTool === 'arrow' ? "bg-orange-500 hover:bg-orange-600" : ""}`} onClick={() => setCurrentTool('arrow')}><ArrowUpRight className="h-5 w-5" /></Button>
+  1188→            <Button variant={currentTool === 'rectangle' ? "default" : "outline"} size="sm" className={`h-10 w-10 p-0 ${currentTool === 'rectangle' ? "bg-orange-500 hover:bg-orange-600" : ""}`} onClick={() => setCurrentTool('rectangle')}><Square className="h-5 w-5" /></Button>
+  1189→            <Button variant="outline" size="sm" className="h-10 w-10 p-0" onClick={() => setRotation((rotation + 90) % 360)} title="Girar 90°">
+  1190→              <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 2v6h-6"/><path d="M3 12a9 9 0 0 1 15-6.7L21 8"/><path d="M3 22v-6h6"/><path d="M21 12a9 9 0 0 1-15 6.7L3 16"/></svg>
+  1191→            </Button>
+  1192→          </div>
+  1193→          <div className="flex items-center gap-1 flex-shrink-0 ml-2">
+  1194→            {['#f97316', '#ef4444', '#22c55e', '#3b82f6', '#ffffff', '#000000'].map(color => (
+  1195→              <button key={color} className={`w-8 h-8 rounded border-2 ${currentColor === color ? 'border-orange-500' : 'border-gray-300'}`} style={{ backgroundColor: color }} onClick={() => setCurrentColor(color)} />
+  1196→            ))}
+  1197→          </div>
+  1198→          <div className="flex items-center gap-1 flex-shrink-0 ml-2 border-l pl-2">
+  1199→            <input
+  1200→              type="range"
+  1201→              min="20"
+  1202→              max="200"
+  1203→              value={circleRadius}
+  1204→              onChange={(e) => setCircleRadius(Number(e.target.value))}
+  1205→              className="w-20 h-2 accent-orange-500"
+  1206→            />
+  1207→            <span className="text-xs text-gray-600">{circleRadius}</span>
+  1208→          </div>
+  1209→          {selectedObjectId && (
+  1210→            <div className="flex items-center gap-1 flex-shrink-0 ml-2">
+  1211→              <Button variant="outline" size="sm" className="h-10 w-10 p-0" onClick={() => resizeSelected(-10)}>-</Button>
+  1212→              <Button variant="outline" size="sm" className="h-10 w-10 p-0" onClick={() => resizeSelected(10)}>+</Button>
+  1213→              <Button variant="destructive" size="sm" className="h-10 w-10 p-0" onClick={deleteSelected}><Trash2 className="h-5 w-5" /></Button>
+  1214→            </div>
+  1215→          )}
+  1216→        </div>
+  1217→
+  1218→        {/* Desktop Tools */}
+  1219→        <div className="hidden md:flex items-center gap-2 p-3 border-b bg-gray-50 flex-wrap">
+  1220→          <div className="flex items-center gap-1 border-r pr-3">
+  1221→            <Button variant={currentTool === 'select' ? "default" : "outline"} size="sm" className={currentTool === 'select' ? "bg-orange-500 hover:bg-orange-600" : ""} onClick={() => setCurrentTool('select')}><MousePointer className="h-4 w-4" /></Button>
+  1222→            <Button variant={currentTool === 'circle' ? "default" : "outline"} size="sm" className={currentTool === 'circle' ? "bg-orange-500 hover:bg-orange-600" : ""} onClick={() => setCurrentTool('circle')}><Circle className="h-4 w-4" /></Button>
+  1223→            <Button variant={currentTool === 'circlePhoto' ? "default" : "outline"} size="sm" className={currentTool === 'circlePhoto' ? "bg-orange-500 hover:bg-orange-600" : ""} onClick={() => setCurrentTool('circlePhoto')}><div className="relative"><Circle className="h-4 w-4" /><Camera className="h-2.5 w-2.5 absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2" /></div></Button>
+  1224→            <Button variant={currentTool === 'arrow' ? "default" : "outline"} size="sm" className={currentTool === 'arrow' ? "bg-orange-500 hover:bg-orange-600" : ""} onClick={() => setCurrentTool('arrow')}><ArrowUpRight className="h-4 w-4" /></Button>
+  1225→            <Button variant={currentTool === 'rectangle' ? "default" : "outline"} size="sm" className={currentTool === 'rectangle' ? "bg-orange-500 hover:bg-orange-600" : ""} onClick={() => setCurrentTool('rectangle')}><Square className="h-4 w-4" /></Button>
+  1226→            <Button variant="outline" size="sm" onClick={() => setRotation((rotation + 90) % 360)} title="Girar 90°">
+  1227→              <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 2v6h-6"/><path d="M3 12a9 9 0 0 1 15-6.7L21 8"/><path d="M3 22v-6h6"/><path d="M21 12a9 9 0 0 1-15 6.7L3 16"/></svg>
+  1228→              <span className="ml-1 text-xs">Girar</span>
+  1229→            </Button>
+  1230→          </div>
+  1231→          <div className="flex items-center gap-2">
+  1232→            <Label className="text-xs text-gray-500">Cor:</Label>
+  1233→            {['#f97316', '#ef4444', '#22c55e', '#3b82f6', '#ffffff', '#000000'].map(color => (
+  1234→              <button key={color} className={`w-6 h-6 rounded border-2 ${currentColor === color ? 'border-orange-500' : 'border-gray-300'}`} style={{ backgroundColor: color }} onClick={() => setCurrentColor(color)} />
+  1235→            ))}
+  1236→          </div>
+  1237→          <div className="flex items-center gap-2 border-l pl-3">
+  1238→            <Label className="text-xs text-gray-500">Tamanho:</Label>
+  1239→            <input
+  1240→              type="range"
+  1241→              min="20"
+  1242→              max="200"
+  1243→              value={circleRadius}
+  1244→              onChange={(e) => setCircleRadius(Number(e.target.value))}
+  1245→              className="w-24 h-2 accent-orange-500"
+  1246→            />
+  1247→            <span className="text-xs text-gray-600 w-8">{circleRadius}px</span>
+  1248→          </div>
+  1249→          {selectedObjectId && (
+  1250→            <div className="flex items-center gap-2 border-l pl-3">
+  1251→              <Button variant="outline" size="sm" onClick={() => resizeSelected(-10)}>-</Button>
+  1252→              <Button variant="outline" size="sm" onClick={() => resizeSelected(10)}>+</Button>
+  1253→              <Button variant="destructive" size="sm" onClick={deleteSelected}><Trash2 className="h-4 w-4" /></Button>
+  1254→            </div>
+  1255→          )}
+  1256→          <div className="ml-auto text-xs text-gray-500">
+  1257→            {currentTool === 'select' && 'Clique para selecionar, arraste para mover'}
+  1258→            {currentTool === 'circle' && 'Clique e arraste para desenhar círculo'}
+  1259→            {currentTool === 'circlePhoto' && 'Clique para adicionar círculo com foto'}
+  1260→            {currentTool === 'arrow' && 'Clique e arraste para desenhar seta'}
+  1261→            {currentTool === 'rectangle' && 'Clique e arraste para desenhar retângulo'}
+  1262→          </div>
+  1263→        </div>
+  1264→
+  1265→        {/* Mobile instructions */}
+  1266→        {selectedObjectId && (
+  1267→          <div className="md:hidden text-center text-xs text-orange-600 py-2 bg-orange-50">
+  1268→            Objeto selecionado • Use os botões + e - para redimensionar
+  1269→          </div>
+  1270→        )}
+  1271→        
+  1272→        <div ref={containerRef} className="flex-1 overflow-auto p-2 md:p-4 flex justify-center bg-gray-100">
+  1273→          {imageSrc ? (
+  1274→            <canvas 
+  1275→              ref={canvasRef} 
+  1276→              className="border rounded shadow-lg cursor-crosshair touch-none max-w-full" 
+  1277→              onMouseDown={handleMouseDown} 
+  1278→              onMouseMove={handleMouseMove} 
+  1279→              onMouseUp={handleMouseUp} 
+  1280→              onMouseLeave={handleMouseUp}
+  1281→              onTouchStart={handleTouchStart}
+  1282→              onTouchMove={handleTouchMove}
+  1283→              onTouchEnd={handleTouchEnd}
+  1284→              style={{ width: canvasSize.width, height: canvasSize.height }} 
+  1285→            />
+  1286→          ) : (
+  1287→            <div className="flex items-center justify-center h-64 text-gray-500">Nenhuma foto para editar</div>
+  1288→          )}
+  1289→        </div>
+  1290→        
+  1291→        <div className="flex justify-between items-center gap-2 p-3 md:p-4 border-t bg-white">
+  1292→          <p className="text-xs text-gray-500 hidden md:block">Delete para remover • Esc para cancelar</p>
+  1293→          <p className="text-xs text-gray-500 md:hidden">Toque no objeto para selecionar</p>
+  1294→          <div className="flex gap-2">
+  1295→            <Button variant="outline" onClick={onClose} className="min-h-[44px] h-11 px-6">Cancelar</Button>
+  1296→            <Button className="bg-orange-500 hover:bg-orange-600 min-h-[44px] h-11 px-6" onClick={handleSave}><Check className="h-5 w-5 mr-2" />Salvar</Button>
+  1297→          </div>
+  1298→        </div>
+  1299→      </div>
+  1300→      <Dialog open={showAddPhotoDialog} onOpenChange={(open) => { setShowAddPhotoDialog(open); if (!open) { setPendingPhotoCircle(null); setCurrentTool('select'); } }}>
+  1301→        <DialogContent className="max-w-[90vw]">
+  1302→          <DialogHeader><DialogTitle>Adicionar Foto ao Círculo</DialogTitle></DialogHeader>
+  1303→          <div className="space-y-4">
+  1304→            <p className="text-sm text-gray-500">Escolha uma foto:</p>
+  1305→            <div className="flex flex-col sm:flex-row gap-2">
+  1306→              <Button variant="outline" className="flex-1 h-12" onClick={() => {
+  1307→                const input = document.createElement('input');
+  1308→                input.type = 'file';
+  1309→                input.accept = 'image/*';
+  1310→                input.onchange = (e) => { const file = (e.target as HTMLInputElement).files?.[0]; if (file) handleAddPhotoToCircle(file); };
+  1311→                input.click();
+  1312→              }}><Upload className="h-5 w-5 mr-2" />Upload</Button>
+  1313→              <Button variant="outline" className="flex-1 h-12" onClick={async () => {
+  1314→                try {
+  1315→                  const items = await navigator.clipboard.read();
+  1316→                  for (const item of items) { for (const type of item.types) { if (type.startsWith('image/')) { const blob = await item.getType(type); handleAddPhotoToCircle(blob as File); } } }
+  1317→                } catch (err) { console.error('Failed to paste:', err); }
+  1318→              }}><Camera className="h-5 w-5 mr-2" />Colar</Button>
+  1319→            </div>
+  1320→          </div>
+  1321→        </DialogContent>
+  1322→      </Dialog>
+  1323→    </div>
+  1324→  );
+  1325→}
+  1326→
+  1327→// Função para gerar imagem preta com número de série
+  1328→function generateSerialNumberImage(serialNumber: string | undefined): string | null {
+  1329→  if (!serialNumber || serialNumber.trim() === '') return null;
+  1330→  
+  1331→  const canvas = document.createElement('canvas');
+  1332→  canvas.width = 400;
+  1333→  canvas.height = 200;
+  1334→  const ctx = canvas.getContext('2d');
+  1335→  
+  1336→  if (!ctx) return null;
+  1337→  
+  1338→  // Fundo preto
+  1339→  ctx.fillStyle = '#000000';
+  1340→  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  1341→  
+  1342→  // Texto branco
+  1343→  ctx.fillStyle = '#FFFFFF';
+  1344→  ctx.font = 'bold 32px monospace';
+  1345→  ctx.textAlign = 'center';
+  1346→  ctx.textBaseline = 'middle';
+  1347→  
+  1348→  // Desenhar o número de série
+  1349→  ctx.fillText(serialNumber.trim(), canvas.width / 2, canvas.height / 2);
+  1350→  
+  1351→  return canvas.toDataURL('image/png');
+  1352→}
+  1353→
+  1354→// Componente para foto de identificação
+  1355→function IdentificationPhoto({
+  1356→  label,
+  1357→  imageData,
+  1358→  onUpload,
+  1359→  onRemove,
+  1360→  caption,
+  1361→  t,
+  1362→}: {
+  1363→  label: string;
+  1364→  imageData: string | null;
+  1365→  onUpload: (data: string) => void;
+  1366→  onRemove: () => void;
+  1367→  caption?: string;
+  1368→  t: (key: string, params?: Record<string, string | number>) => string;
+  1369→}) {
+  1370→  const [showOptions, setShowOptions] = useState(false);
+  1371→  const [showFullscreen, setShowFullscreen] = useState(false);
+  1372→  const [cameraStream, setCameraStream] = useState<MediaStream | null>(null);
+  1373→  const [showCamera, setShowCamera] = useState(false);
+  1374→
+  1375→  const handleFileUpload = (file: File) => {
+  1376→    const reader = new FileReader();
+  1377→    reader.onload = (e) => { onUpload(e.target?.result as string); };
+  1378→    reader.readAsDataURL(file);
+  1379→  };
+  1380→
+  1381→  const handleOpenCamera = async () => {
+  1382→    try {
+  1383→      const stream = await navigator.mediaDevices.getUserMedia({ 
+  1384→        video: { facingMode: 'environment' } 
+  1385→      });
+  1386→      setCameraStream(stream);
+  1387→      setShowCamera(true);
+  1388→    } catch (err) {
+  1389→      console.error('Erro ao abrir câmera:', err);
+  1390→      alert('Não foi possível acessar a câmera. Verifique as permissões.');
+  1391→    }
+  1392→  };
+  1393→
+  1394→  const handleCapturePhoto = () => {
+  1395→    const video = document.getElementById('camera-video-identification') as HTMLVideoElement;
+  1396→    if (!video) return;
+  1397→    
+  1398→    const canvas = document.createElement('canvas');
+  1399→    canvas.width = video.videoWidth;
+  1400→    canvas.height = video.videoHeight;
+  1401→    const ctx = canvas.getContext('2d');
+  1402→    if (ctx) {
+  1403→      ctx.drawImage(video, 0, 0);
+  1404→      const imageData = canvas.toDataURL('image/png');
+  1405→      onUpload(imageData);
+  1406→    }
+  1407→    
+  1408→    // Stop camera
+  1409→    if (cameraStream) {
+  1410→      cameraStream.getTracks().forEach(track => track.stop());
+  1411→      setCameraStream(null);
+  1412→    }
+  1413→    setShowCamera(false);
+  1414→  };
+  1415→
+  1416→  const handleCloseCamera = () => {
+  1417→    if (cameraStream) {
+  1418→      cameraStream.getTracks().forEach(track => track.stop());
+  1419→      setCameraStream(null);
+  1420→    }
+  1421→    setShowCamera(false);
+  1422→  };
+  1423→
+  1424→  const handlePaste = async () => {
+  1425→    try {
+  1426→      const clipboardItems = await navigator.clipboard.read();
+  1427→      for (const item of clipboardItems) {
+  1428→        for (const type of item.types) {
+  1429→          if (type.startsWith('image/')) {
+  1430→            const blob = await item.getType(type);
+  1431→            const reader = new FileReader();
+  1432→            reader.onload = (e) => { onUpload(e.target?.result as string); };
+  1433→            reader.readAsDataURL(blob);
+  1434→          }
+  1435→        }
+  1436→      }
+  1437→    } catch (err) {
+  1438→      console.error('Failed to paste:', err);
+  1439→    }
+  1440→  };
+  1441→
+  1442→  return (
+  1443→    <>
+  1444→      <Card className="overflow-hidden">
+  1445→        <div className="p-2 bg-orange-500 text-white text-center font-semibold text-sm">{label}</div>
+  1446→        <div 
+  1447→          className="relative h-28 md:h-32 bg-gray-100 flex items-center justify-center cursor-pointer hover:bg-gray-200 transition-colors active:bg-gray-300" 
+  1448→          onClick={() => setShowOptions(true)}
+  1449→        >
+  1450→          {imageData ? (
+  1451→            <>
+  1452→              <img src={imageData} alt={label} className="w-full h-full object-cover" />
+  1453→              <Button 
+  1454→                size="icon" 
+  1455→                className="absolute top-1 right-1 rounded-full bg-red-600 hover:bg-red-700 h-8 w-8 md:h-6 md:w-6" 
+  1456→                onClick={(e) => { e.stopPropagation(); onRemove(); }}
+  1457→              >
+  1458→                <X className="h-4 w-4 md:h-3 md:w-3" />
+  1459→              </Button>
+  1460→            </>
+  1461→          ) : (
+  1462→            <div className="text-center text-gray-400">
+  1463→              <Camera className="h-8 w-8 mx-auto mb-1" />
+  1464→              <p className="text-xs">{t('photos.clickToAdd')}</p>
+  1465→            </div>
+  1466→          )}
+  1467→        </div>
+  1468→        {caption && <div className="p-2 bg-gray-50 text-center text-xs text-gray-600 min-h-[32px]">{caption}</div>}
+  1469→      </Card>
+  1470→
+  1471→      {/* Photo Options Dialog */}
+  1472→      <PhotoOptionsDialog
+  1473→        open={showOptions}
+  1474→        onOpenChange={setShowOptions}
+  1475→        hasImage={!!imageData}
+  1476→        onUpload={handleFileUpload}
+  1477→        onCamera={handleOpenCamera}
+  1478→        onPaste={handlePaste}
+  1479→        onViewFullscreen={() => setShowFullscreen(true)}
+  1480→        t={t}
+  1481→      />
+  1482→
+  1483→      {/* Fullscreen Viewer */}
+  1484→      {showFullscreen && imageData && (
+  1485→        <FullScreenImageViewer
+  1486→          imageData={imageData}
+  1487→          onClose={() => setShowFullscreen(false)}
+  1488→          t={t}
+  1489→        />
+  1490→      )}
+  1491→
+  1492→      {/* Camera Dialog */}
+  1493→      {showCamera && cameraStream && (
+  1494→        <div className="fixed inset-0 bg-black z-[100] flex flex-col">
+  1495→          <div className="flex justify-between items-center p-3 md:p-4 bg-black/50">
+  1496→            <span className="text-white font-semibold text-sm md:text-base">{label}</span>
+  1497→            <Button variant="ghost" size="icon" className="text-white h-10 w-10" onClick={handleCloseCamera}>
+  1498→              <X className="h-6 w-6" />
+  1499→            </Button>
+  1500→          </div>
+  1501→          <div className="flex-1 relative">
+  1502→            <video
+  1503→              id="camera-video-identification"
+  1504→              autoPlay
+  1505→              playsInline
+  1506→              muted
+  1507→              className="w-full h-full object-cover"
+  1508→              ref={(video) => {
+  1509→                if (video && cameraStream) {
+  1510→                  video.srcObject = cameraStream;
+  1511→                }
+  1512→              }}
+  1513→            />
+  1514→          </div>
+  1515→          <div className="p-4 md:p-6 flex justify-center bg-black/50">
+  1516→            <Button 
+  1517→              size="lg"
+  1518→              className="rounded-full h-16 w-16 md:h-14 md:w-14 bg-white text-black hover:bg-gray-200"
+  1519→              onClick={handleCapturePhoto}
+  1520→            >
+  1521→              <Camera className="h-8 w-8 md:h-7 md:w-7" />
+  1522→            </Button>
+  1523→          </div>
+  1524→        </div>
+  1525→      )}
+  1526→    </>
+  1527→  );
+  1528→}
+  1529→
+  1530→// ============================================
+  1531→// ABA HOME - Com Categorias
+  1532→// ============================================
+  1533→function HomeContent({ reportId, onRegenerateId }: { reportId: string; onRegenerateId: () => void }) {
+  1534→  const {
+  1535→    inspection,
+  1536→    categories,
+  1537→    conclusion,
+  1538→    updateInspection,
+  1539→    setCategories,
+  1540→    addPhotoToCategory,
+  1541→    removePhotoFromCategory,
+  1542→    updatePhotoInCategory,
+  1543→    movePhotoInCategory,
+  1544→    addAdditionalPartToCategory,
+  1545→    removeAdditionalPartFromCategory,
+  1546→    updateAdditionalPartsParentPn,
+  1547→    setConclusion,
+  1548→    clearAll,
+  1549→  } = useHomeReportStore();
+  1550→  
+  1551→  const { language, t } = useTranslation();
+  1552→
+  1553→  const [expandedCategories, setExpandedCategories] = useState<Record<string, boolean>>({});
+  1554→  const [showPhotoOptions, setShowPhotoOptions] = useState<{ categoryId: string; photoId: string } | null>(null);
+  1555→  const [showAdditionalParts, setShowAdditionalParts] = usePersistedState<Record<string, boolean>>('home-subparts-open', {});
+  1556→  const [showClearConfirm, setShowClearConfirm] = useState(false);
+  1557→  const [isLoading, setIsLoading] = useState(false);
+  1558→  const [editingPhoto, setEditingPhoto] = useState<{ categoryId: string; photo: PhotoData; editMode: 'primary' | 'secondary' | 'dual' } | null>(null);
+  1559→  const [showMovePhotoDialog, setShowMovePhotoDialog] = useState<{ categoryId: string; photoId: string; currentIndex: number } | null>(null);
+  1560→  const [movePhotoToIndex, setMovePhotoToIndex] = useState(0);
+  1561→  const [showEmailDialog, setShowEmailDialog] = useState(false);
+  1562→  const [fullscreenImage, setFullscreenImage] = useState<string | null>(null);
+  1563→  const [cameraStream, setCameraStream] = useState<MediaStream | null>(null);
+  1564→  const [showCamera, setShowCamera] = useState(false);
+  1565→  const [cameraTarget, setCameraTarget] = useState<{ categoryId: string; photoId: string } | null>(null);
+  1566→  const [showExportDialog, setShowExportDialog] = useState(false);
+  1567→  const [showDataDialog, setShowDataDialog] = useState(false);
+  1568→  const [isTranslating, setIsTranslating] = useState(false);
+  1569→  const [showTranslateDialog, setShowTranslateDialog] = useState(false);
+  1570→  const [translateProgress, setTranslateProgress] = useState({ current: 0, total: 0, status: '' });
+  1571→
+  1572→  const fileInputRef = useRef<HTMLInputElement>(null);
+  1573→  const fileImportRef = useRef<HTMLInputElement>(null);
+  1574→  // Função para traduzir todos os textos dinâmicos - HomeContent
+  1575→  const handleTranslateAllHome = async (targetLang: Language) => {
+  1576→    setShowTranslateDialog(true);
+  1577→    setIsTranslating(true);
+  1578→    
+  1579→    try {
+  1580→      // Coletar todos os textos para traduzir
+  1581→      const textItems: { id: string; text: string; type: string }[] = [];
+  1582→      
+  1583→      // Textos da inspeção
+  1584→      if (inspection.descricao?.trim()) {
+  1585→        textItems.push({ id: 'inspection.descricao', text: inspection.descricao, type: 'inspection' });
+  1586→      }
+  1587→      if (inspection.osExecucao?.trim()) {
+  1588→        textItems.push({ id: 'inspection.osExecucao', text: inspection.osExecucao, type: 'inspection' });
+  1589→      }
+  1590→      if (inspection.inspetor?.trim()) {
+  1591→        textItems.push({ id: 'inspection.inspetor', text: inspection.inspetor, type: 'inspection' });
+  1592→      }
+  1593→      if (inspection.cliente?.trim()) {
+  1594→        textItems.push({ id: 'inspection.cliente', text: inspection.cliente, type: 'inspection' });
+  1595→      }
+  1596→      
+  1597→      // Textos das categorias e fotos
+  1598→      categories.forEach((category) => {
+  1599→        category.photos.forEach((photo) => {
+  1600→          if (photo.description?.trim()) {
+  1601→            textItems.push({ id: `photo.${category.id}.${photo.id}.description`, text: photo.description, type: 'photo' });
+  1602→          }
+  1603→          if (photo.partName?.trim()) {
+  1604→            textItems.push({ id: `photo.${category.id}.${photo.id}.partName`, text: photo.partName, type: 'photo' });
+  1605→          }
+  1606→        });
+  1607→        
+  1608→        // Peças adicionais
+  1609→        category.additionalParts?.forEach((part) => {
+  1610→          if (part.partName?.trim()) {
+  1611→            textItems.push({ id: `part.${category.id}.${part.id}.partName`, text: part.partName, type: 'part' });
+  1612→          }
+  1613→        });
+  1614→      });
+  1615→      
+  1616→      // Conclusão
+  1617→      if (conclusion?.trim()) {
+  1618→        textItems.push({ id: 'conclusion', text: conclusion, type: 'conclusion' });
+  1619→      }
+  1620→      
+  1621→      const total = textItems.length;
+  1622→      setTranslateProgress({ current: 0, total, status: `Encontrados ${total} textos para traduzir` });
+  1623→      
+  1624→      if (total === 0) {
+  1625→        alert('Nenhum texto encontrado para traduzir!');
+  1626→        setShowTranslateDialog(false);
+  1627→        setIsTranslating(false);
+  1628→        return;
+  1629→      }
+  1630→      
+  1631→      // Enviar todos os textos para tradução
+  1632→      setTranslateProgress({ current: 0, total, status: 'Enviando para API de tradução...' });
+  1633→      
+  1634→      const response = await fetch('/api/translate-content', {
+  1635→        method: 'POST',
+  1636→        headers: { 'Content-Type': 'application/json' },
+  1637→        body: JSON.stringify({
+  1638→          texts: textItems.map(item => item.text),
+  1639→          targetLanguage: targetLang,
+  1640→        }),
+  1641→      });
+  1642→      
+  1643→      if (!response.ok) {
+  1644→        const errorData = await response.json().catch(() => ({}));
+  1645→        throw new Error(errorData.message || `Erro na API: ${response.status}`);
+  1646→      }
+  1647→      
+  1648→      const data = await response.json();
+  1649→      const translations: string[] = data.translations || [];
+  1650→      
+  1651→      setTranslateProgress({ current: total, total, status: 'Aplicando traduções...' });
+  1652→      
+  1653→      // Aplicar traduções de volta
+  1654→      for (let i = 0; i < textItems.length; i++) {
+  1655→        const item = textItems[i];
+  1656→        const translation = translations[i] || item.text;
+  1657→        
+  1658→        if (item.id === 'inspection.descricao') {
+  1659→          updateInspection({ descricao: translation });
+  1660→        } else if (item.id === 'inspection.osExecucao') {
+  1661→          updateInspection({ osExecucao: translation });
+  1662→        } else if (item.id === 'inspection.inspetor') {
+  1663→          updateInspection({ inspetor: translation });
+  1664→        } else if (item.id === 'inspection.cliente') {
+  1665→          updateInspection({ cliente: translation });
+  1666→        } else if (item.id === 'conclusion') {
+  1667→          setConclusion(translation);
+  1668→        } else if (item.id.startsWith('photo.')) {
+  1669→          const [, categoryId, photoId, field] = item.id.split('.');
+  1670→          if (field === 'description') {
+  1671→            updatePhotoInCategory(categoryId, photoId, { description: translation });
+  1672→          } else if (field === 'partName') {
+  1673→            updatePhotoInCategory(categoryId, photoId, { partName: translation });
+  1674→          }
+  1675→        } else if (item.id.startsWith('part.')) {
+  1676→          const [, categoryId, partId] = item.id.split('.');
+  1677→          const category = categories.find(c => c.id === categoryId);
+  1678→          if (category) {
+  1679→            const partIndex = category.additionalParts?.findIndex(p => p.id === partId) ?? -1;
+  1680→            if (partIndex !== -1 && category.additionalParts) {
+  1681→              const updatedParts = [...category.additionalParts];
+  1682→              updatedParts[partIndex] = { ...updatedParts[partIndex], partName: translation };
+  1683→              // Update via store if available, otherwise skip
+  1684→            }
+  1685→          }
+  1686→        }
+  1687→      }
+  1688→      
+  1689→      setTranslateProgress({ current: total, total, status: 'Tradução concluída!' });
+  1690→      
+  1691→      setTimeout(() => {
+  1692→        setShowTranslateDialog(false);
+  1693→        alert(`✅ Tradução concluída!\n\n${total} textos traduzidos para ${LANGUAGE_NAMES[targetLang]}`);
+  1694→      }, 500);
+  1695→      
+  1696→    } catch (error) {
+  1697→      console.error('Erro ao traduzir:', error);
+  1698→      alert('Erro ao traduzir o conteúdo: ' + (error instanceof Error ? error.message : 'Erro desconhecido'));
+  1699→      setShowTranslateDialog(false);
+  1700→    }
+  1701→    setIsTranslating(false);
+  1702→  };
+  1703→
+  1704→  // Função para abrir o diálogo de tradução
+  1705→  const handleTranslateContentHome = () => {
+  1706→    setShowTranslateDialog(true);
+  1707→  };
+  1708→
+  1709→  const handleTagChange = (tag: string) => {
+  1710→    updateInspection({ tag });
+  1711→    if (tag && MACHINE_DATA[tag]) {
+  1712→      const machine = MACHINE_DATA[tag];
+  1713→      updateInspection({ modelo: machine.modelo, sn: machine.sn, entrega: machine.entrega, cliente: machine.cliente });
+  1714→    }
+  1715→  };
+  1716→
+  1717→  const handlePhotoUpload = (categoryId: string, photoId: string, file: File) => {
+  1718→    const reader = new FileReader();
+  1719→    reader.onload = (e) => { updatePhotoInCategory(categoryId, photoId, { imageData: e.target?.result as string, editedImageData: null }); };
+  1720→    reader.readAsDataURL(file);
+  1721→    setShowPhotoOptions(null);
+  1722→  };
+  1723→
+  1724→  const handlePaste = useCallback(async (categoryId: string, photoId: string) => {
+  1725→    try {
+  1726→      const clipboardItems = await navigator.clipboard.read();
+  1727→      for (const item of clipboardItems) {
+  1728→        for (const type of item.types) {
+  1729→          if (type.startsWith('image/')) {
+  1730→            const blob = await item.getType(type);
+  1731→            const reader = new FileReader();
+  1732→            reader.onload = (e) => { updatePhotoInCategory(categoryId, photoId, { imageData: e.target?.result as string, editedImageData: null }); };
+  1733→            reader.readAsDataURL(blob);
+  1734→          }
+  1735→        }
+  1736→      }
+  1737→    } catch (err) { console.error('Failed to paste:', err); }
+  1738→    setShowPhotoOptions(null);
+  1739→  }, [updatePhotoInCategory]);
+  1740→
+  1741→  // Camera functions
+  1742→  const openCamera = async () => {
+  1743→    try {
+  1744→      const stream = await navigator.mediaDevices.getUserMedia({ 
+  1745→        video: { facingMode: 'environment' } 
+  1746→      });
+  1747→      setCameraStream(stream);
+  1748→      setShowCamera(true);
+  1749→    } catch (err) {
+  1750→      console.error('Erro ao abrir câmera:', err);
+  1751→      alert('Não foi possível acessar a câmera. Verifique as permissões.');
+  1752→    }
+  1753→  };
+  1754→
+  1755→  const closeCamera = () => {
+  1756→    if (cameraStream) {
+  1757→      cameraStream.getTracks().forEach(track => track.stop());
+  1758→      setCameraStream(null);
+  1759→    }
+  1760→    setShowCamera(false);
+  1761→    setCameraTarget(null);
+  1762→  };
+  1763→
+  1764→  const capturePhoto = () => {
+  1765→    const video = document.getElementById('camera-video-home') as HTMLVideoElement;
+  1766→    if (!video || !cameraTarget) return;
+  1767→    
+  1768→    const canvas = document.createElement('canvas');
+  1769→    canvas.width = video.videoWidth;
+  1770→    canvas.height = video.videoHeight;
+  1771→    const ctx = canvas.getContext('2d');
+  1772→    if (ctx) {
+  1773→      ctx.drawImage(video, 0, 0);
+  1774→      const imageData = canvas.toDataURL('image/png');
+  1775→      updatePhotoInCategory(cameraTarget.categoryId, cameraTarget.photoId, { imageData, editedImageData: null });
+  1776→    }
+  1777→    
+  1778→    closeCamera();
+  1779→    setShowPhotoOptions(null);
+  1780→  };
+  1781→
+  1782→  // Ctrl+V listener removido - colar foto apenas pelo botão "Colar da área de transferência"
+  1783→
+  1784→  const handleClearReport = () => { clearAll(); setShowClearConfirm(false); onRegenerateId(); };
+  1785→
+  1786→  const handleExport = () => {
+  1787→    // Export ALL data including photos (base64), categories, inspection, conclusion
+  1788→    const data = { 
+  1789→      version: '1.0',
+  1790→      exportDate: new Date().toISOString(),
+  1791→      inspection, 
+  1792→      categories, 
+  1793→      conclusion 
+  1794→    };
+  1795→    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+  1796→    const url = URL.createObjectURL(blob);
+  1797→    const a = document.createElement('a');
+  1798→    a.href = url;
+  1799→    a.download = `Relatorio_${sanitizeForFilename(inspection.descricao || inspection.tag)}_${reportId}_${new Date().toISOString().split('T')[0]}.json`;
+  1800→    a.click();
+  1801→    URL.revokeObjectURL(url);
+  1802→  };
+  1803→
+  1804→  const handleImport = (e: React.ChangeEvent<HTMLInputElement>) => {
+  1805→    const file = e.target.files?.[0];
+  1806→    if (!file) return;
+  1807→    // Check if there's existing data that might conflict
+  1808→    const hasExistingData = inspection.tag || inspection.cliente || categories.some(cat => 
+  1809→      cat.photos.some(p => p.imageData || p.pn || p.description || p.partName) || 
+  1810→      cat.additionalParts.length > 0
+  1811→    ) || conclusion;
+  1812→    if (hasExistingData) {
+  1813→      if (!confirm('Já existe um relatório em andamento. Deseja substituí-lo pelo arquivo importado? Os dados atuais serão perdidos.')) {
+  1814→        e.target.value = '';
+  1815→        return;
+  1816→      }
+  1817→      // Clear existing data before importing to prevent conflicts
+  1818→      clearAll();
+  1819→    }
+  1820→    const reader = new FileReader();
+  1821→    reader.onload = (event) => {
+  1822→      try {
+  1823→        const data = JSON.parse(event.target?.result as string);
+  1824→        // Import inspection data
+  1825→        if (data.inspection) {
+  1826→          Object.keys(data.inspection).forEach(key => {
+  1827→            updateInspection({ [key]: data.inspection[key] });
+  1828→          });
+  1829→        }
+  1830→        // Import categories with all photos and additional parts
+  1831→        if (data.categories && Array.isArray(data.categories)) {
+  1832→          // Fix sub-part associations: set photoId on sub-parts
+  1833→          data.categories.forEach((cat: any) => {
+  1834→            if (cat.additionalParts && cat.additionalParts.length > 0) {
+  1835→              cat.additionalParts.forEach((ap: any) => {
+  1836→                if (ap.parentPn) {
+  1837→                  const match = cat.photos.find((p: any) => p.pn === ap.parentPn);
+  1838→                  if (match) ap.photoId = match.id;
+  1839→                }
+  1840→              });
+  1841→            }
+  1842→          });
+  1843→
+  1844→          setCategories(data.categories);
+  1845→          // Auto-expand sub-parts sections for photos that have them
+  1846→          const expandMap: Record<string, boolean> = {};
+  1847→          data.categories.forEach((cat: any) => {
+  1848→            if (cat.additionalParts && cat.additionalParts.length > 0) {
+  1849→              cat.photos.forEach((photo: any) => {
+  1850→                const hasSub = photoHasSubPartData(photo, cat.additionalParts);
+  1851→                if (hasSub) expandMap[`${cat.id}-${photo.id}`] = true;
+  1852→              });
+  1853→            }
+  1854→          });
+  1855→          if (Object.keys(expandMap).length > 0) {
+  1856→            setShowAdditionalParts(prev => ({ ...prev, ...expandMap }));
+  1857→          }
+  1858→        }
+  1859→        // Import conclusion
+  1860→        if (data.conclusion !== undefined) setConclusion(data.conclusion);
+  1861→      } catch (err) { 
+  1862→        console.error('Failed to import:', err);
+  1863→        alert('Erro ao importar arquivo. Verifique se o arquivo é válido.');
+  1864→      }
+  1865→      // Reset input to allow re-importing same file
+  1866→      e.target.value = '';
+  1867→    };
+  1868→    reader.onerror = () => {
+  1869→      alert('Erro ao ler o arquivo.');
+  1870→      e.target.value = '';
+  1871→    };
+  1872→    reader.readAsText(file);
+  1873→  };
+  1874→
+  1875→  // Função para mover foto para posição específica
+  1876→  const handleMovePhotoToPosition = () => {
+  1877→    if (movePhotoFromIndex === null) return;
+  1878→    if (movePhotoFromIndex === movePhotoToIndex) {
+  1879→      setShowMovePhotoDialog(false);
+  1880→      setMovePhotoFromIndex(null);
+  1881→      return;
+  1882→    }
+  1883→    
+  1884→    movePhoto(movePhotoFromIndex, movePhotoToIndex);
+  1885→    setShowMovePhotoDialog(false);
+  1886→    setMovePhotoFromIndex(null);
+  1887→  };
+  1888→
+  1889→  const handleGeneratePPT = async () => {
+  1890→    setIsLoading(true);
+  1891→    try {
+  1892→      // Translate dynamic texts if not in Portuguese
+  1893→      if (language !== 'pt') {
+  1894→        const { translateDynamic, translateDynamicBatch } = useTranslationStore.getState();
+  1895→        
+  1896→        // Translate all inspection text fields
+  1897→        const translatedInspection = { ...inspection };
+  1898→        if (inspection.descricao) {
+  1899→          translatedInspection.descricao = await translateDynamic(inspection.descricao);
+  1900→        }
+  1901→        if (inspection.osExecucao) {
+  1902→          translatedInspection.osExecucao = await translateDynamic(inspection.osExecucao);
+  1903→        }
+  1904→        if (inspection.inspetor) {
+  1905→          translatedInspection.inspetor = await translateDynamic(inspection.inspetor);
+  1906→        }
+  1907→        if (inspection.cliente) {
+  1908→          translatedInspection.cliente = await translateDynamic(inspection.cliente);
+  1909→        }
+  1910→        
+  1911→        // Translate all category photos
+  1912→        const translatedCategories = await Promise.all(categories.map(async (category) => {
+  1913→          const translatedPhotos = await Promise.all(category.photos.map(async (photo) => {
+  1914→            const translatedPhoto = { ...photo };
+  1915→            if (photo.description) {
+  1916→              translatedPhoto.description = await translateDynamic(photo.description);
+  1917→            }
+  1918→            if (photo.partName) {
+  1919→              translatedPhoto.partName = await translateDynamic(photo.partName);
+  1920→            }
+  1921→            return translatedPhoto;
+  1922→          }));
+  1923→          
+  1924→          const translatedAdditionalParts = await Promise.all(category.additionalParts.map(async (part) => {
+  1925→            const translatedPart = { ...part };
+  1926→            if (part.partName) {
+  1927→              translatedPart.partName = await translateDynamic(part.partName);
+  1928→            }
+  1929→            return translatedPart;
+  1930→          }));
+  1931→          
+  1932→          return {
+  1933→            ...category,
+  1934→            photos: translatedPhotos,
+  1935→            additionalParts: translatedAdditionalParts,
+  1936→          };
+  1937→        }));
+  1938→        
+  1939→        // Translate conclusion
+  1940→        const translatedConclusion = conclusion ? await translateDynamic(conclusion) : conclusion;
+  1941→        
+  1942→        await generateHomePowerPoint({ 
+  1943→          inspection: translatedInspection, 
+  1944→          categories: translatedCategories, 
+  1945→          conclusion: translatedConclusion,
+  1946→          language,
+  1947→          reportId
+  1948→        });
+  1949→        // Auto-download Excel parts table
+  1950→        exportPartsTableToExcelHome(translatedInspection, translatedCategories, reportId);
+  1951→      } else {
+  1952→        await generateHomePowerPoint({ inspection, categories, conclusion, language: 'pt', reportId });
+  1953→        // Auto-download Excel parts table
+  1954→        exportPartsTableToExcelHome(inspection, categories, reportId);
+  1955→      }
+  1956→    } catch (error) { 
+  1957→      console.error('Error generating PowerPoint:', error); 
+  1958→    }
+  1959→    setIsLoading(false);
+  1960→  };
+  1961→
+  1962→  // Email handlers
+  1963→  const handleSendAnalysisEmail = () => {
+  1964→    const subject = generateEmailSubject(inspection, 'analysis', reportId);
+  1965→    const body = generateAnalysisEmailBody(inspection, [], [], categories, reportId);
+  1966→    openEmailClient({
+  1967→      to: EMAIL_CONFIG.analysisRecipients,
+  1968→      cc: EMAIL_CONFIG.analysisCc,
+  1969→      subject,
+  1970→      body,
+  1971→    });
+  1972→    setShowEmailDialog(false);
+  1973→  };
+  1974→
+  1975→  const handleSendConclusionEmail = () => {
+  1976→    const subject = generateEmailSubject(inspection, 'conclusion', reportId);
+  1977→    const body = generateConclusionEmailBody(inspection, conclusion, [], [], categories, reportId);
+  1978→    openEmailClient({
+  1979→      to: EMAIL_CONFIG.conclusionRecipients,
+  1980→      cc: EMAIL_CONFIG.conclusionCc,
+  1981→      subject,
+  1982→      body,
+  1983→    });
+  1984→    setShowEmailDialog(false);
+  1985→  };
+  1986→
+  1987→  const toggleCategory = (categoryId: string) => {
+  1988→    setExpandedCategories(prev => ({ ...prev, [categoryId]: !prev[categoryId] }));
+  1989→  };
+  1990→
+  1991→  return (
+  1992→    <>
+  1993→      {/* Action Buttons - Responsivo */}
+  1994→      <div className="fixed top-20 right-4 md:flex flex-col gap-2 z-40 hidden">
+  1995→        <Button size="icon" className="rounded-full bg-red-600 hover:bg-red-700" onClick={() => setShowClearConfirm(true)} title={t('action.clear')}><Trash2 className="h-5 w-5" /></Button>
+  1996→        
+  1997→        {/* Botão de Traduzir */}
+  1998→        <Button 
+  1999→          size="icon" 
+  2000→          className="rounded-full bg-cyan-600 hover:bg-cyan-700" 
+
+[showing lines 1-2000 of 4056; use offset=2001 with limit to continue reading]

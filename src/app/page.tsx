@@ -1449,7 +1449,7 @@ function IdentificationPhoto({
         >
           {imageData ? (
             <>
-              <img src={imageData} alt={label} className="w-full h-full object-cover" />
+              <img src={imageData} alt={label} className="absolute inset-0 w-full h-full object-cover" />
               <Button 
                 size="icon" 
                 className="absolute top-1 right-1 rounded-full bg-red-600 hover:bg-red-700 h-8 w-8 md:h-6 md:w-6" 
@@ -2308,7 +2308,7 @@ function HomeContent({ reportId, onRegenerateId }: { reportId: string; onRegener
                                 <AdditionalPartsSection parentPn={photo.pn} photoId={photo.id} additionalParts={category.additionalParts} onAddPart={(part) => addAdditionalPartToCategory(category.id, part)} onRemovePart={(id) => removeAdditionalPartFromCategory(category.id, id)} t={t} />
                               )}
                             </div>
-                            <div className="relative h-40 bg-gray-200 flex items-center justify-center gap-1 cursor-pointer hover:bg-gray-300 transition-colors">
+                            <div className="relative h-60 bg-gray-200 flex items-center justify-center gap-1 cursor-pointer hover:bg-gray-300 transition-colors">
                               {/* Primeira foto */}
                               <div className="flex-1 h-full relative" onClick={() => { setShowPhotoOptions({ categoryId: category.id, photoId: photo.id }); }}>
                                 {photo.imageData ? (
@@ -3562,7 +3562,7 @@ function InspecaoContent({ reportId, onRegenerateId }: { reportId: string; onReg
                   )}
                 </div>
                 {/* Área de foto(s) - 1 ou 2 lado a lado */}
-                <div className="relative h-48 bg-gray-200 flex items-center justify-center gap-1 cursor-pointer hover:bg-gray-300 transition-colors">
+                <div className="relative h-72 bg-gray-200 flex items-center justify-center gap-1 cursor-pointer hover:bg-gray-300 transition-colors">
                   {/* Primeira foto */}
                   <div className="flex-1 h-full relative" onClick={() => { setShowPhotoOptions(photo.id); }}>
                     {photo.imageData ? (

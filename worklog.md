@@ -144,3 +144,19 @@ Stage Summary:
 - When two photos have the same PN, each photo only shows its own sub-parts (no duplication)
 - "+++++" placeholder still works for photos without PN that have sub-parts
 - Files changed: src/lib/partsUtils.ts, src/app/page.tsx, src/lib/excelExport.ts
+---
+Task ID: 1
+Agent: main
+Task: Fix photo sizes - Identificação da Máquina fill box + Registro Fotográfico 50% larger
+
+Work Log:
+- Added `absolute inset-0` to IdentificationPhoto img to guarantee filling the relative parent container regardless of flex layout
+- Changed home page Registro Fotográfico photo container from `h-40` to `h-60` (50% increase)
+- Changed inspeção page photo container from `h-48` to `h-72` (50% increase)
+- Verified double photo edit bug is already fixed (handleSave branches on editMode at lines 1149-1153)
+- Verified via browser: h-60 classes applied correctly, no h-40 remaining, no lint errors, no runtime errors
+
+Stage Summary:
+- Photos in Identificação da Máquina now use absolute positioning to fill the box completely
+- Registro Fotográfico photos are 50% larger (h-40→h-60 on home, h-48→h-72 on inspeção)
+- Double photo edit bug was already resolved in the codebase

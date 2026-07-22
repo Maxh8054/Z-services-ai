@@ -1,0 +1,2002 @@
+  1463→              <Camera className="h-8 w-8 mx-auto mb-1" />
+  1464→              <p className="text-xs">{t('photos.clickToAdd')}</p>
+  1465→            </div>
+  1466→          )}
+  1467→        </div>
+  1468→        {caption && <div className="p-2 bg-gray-50 text-center text-xs text-gray-600 min-h-[32px]">{caption}</div>}
+  1469→      </Card>
+  1470→
+  1471→      {/* Photo Options Dialog */}
+  1472→      <PhotoOptionsDialog
+  1473→        open={showOptions}
+  1474→        onOpenChange={setShowOptions}
+  1475→        hasImage={!!imageData}
+  1476→        onUpload={handleFileUpload}
+  1477→        onCamera={handleOpenCamera}
+  1478→        onPaste={handlePaste}
+  1479→        onViewFullscreen={() => setShowFullscreen(true)}
+  1480→        t={t}
+  1481→      />
+  1482→
+  1483→      {/* Fullscreen Viewer */}
+  1484→      {showFullscreen && imageData && (
+  1485→        <FullScreenImageViewer
+  1486→          imageData={imageData}
+  1487→          onClose={() => setShowFullscreen(false)}
+  1488→          t={t}
+  1489→        />
+  1490→      )}
+  1491→
+  1492→      {/* Camera Dialog */}
+  1493→      {showCamera && cameraStream && (
+  1494→        <div className="fixed inset-0 bg-black z-[100] flex flex-col">
+  1495→          <div className="flex justify-between items-center p-3 md:p-4 bg-black/50">
+  1496→            <span className="text-white font-semibold text-sm md:text-base">{label}</span>
+  1497→            <Button variant="ghost" size="icon" className="text-white h-10 w-10" onClick={handleCloseCamera}>
+  1498→              <X className="h-6 w-6" />
+  1499→            </Button>
+  1500→          </div>
+  1501→          <div className="flex-1 relative">
+  1502→            <video
+  1503→              id="camera-video-identification"
+  1504→              autoPlay
+  1505→              playsInline
+  1506→              muted
+  1507→              className="w-full h-full object-cover"
+  1508→              ref={(video) => {
+  1509→                if (video && cameraStream) {
+  1510→                  video.srcObject = cameraStream;
+  1511→                }
+  1512→              }}
+  1513→            />
+  1514→          </div>
+  1515→          <div className="p-4 md:p-6 flex justify-center bg-black/50">
+  1516→            <Button 
+  1517→              size="lg"
+  1518→              className="rounded-full h-16 w-16 md:h-14 md:w-14 bg-white text-black hover:bg-gray-200"
+  1519→              onClick={handleCapturePhoto}
+  1520→            >
+  1521→              <Camera className="h-8 w-8 md:h-7 md:w-7" />
+  1522→            </Button>
+  1523→          </div>
+  1524→        </div>
+  1525→      )}
+  1526→    </>
+  1527→  );
+  1528→}
+  1529→
+  1530→// ============================================
+  1531→// ABA HOME - Com Categorias
+  1532→// ============================================
+  1533→function HomeContent({ reportId, onRegenerateId }: { reportId: string; onRegenerateId: () => void }) {
+  1534→  const {
+  1535→    inspection,
+  1536→    categories,
+  1537→    conclusion,
+  1538→    updateInspection,
+  1539→    setCategories,
+  1540→    addPhotoToCategory,
+  1541→    removePhotoFromCategory,
+  1542→    updatePhotoInCategory,
+  1543→    movePhotoInCategory,
+  1544→    addAdditionalPartToCategory,
+  1545→    removeAdditionalPartFromCategory,
+  1546→    updateAdditionalPartsParentPn,
+  1547→    setConclusion,
+  1548→    clearAll,
+  1549→  } = useHomeReportStore();
+  1550→  
+  1551→  const { language, t } = useTranslation();
+  1552→
+  1553→  const [expandedCategories, setExpandedCategories] = useState<Record<string, boolean>>({});
+  1554→  const [showPhotoOptions, setShowPhotoOptions] = useState<{ categoryId: string; photoId: string } | null>(null);
+  1555→  const [showAdditionalParts, setShowAdditionalParts] = usePersistedState<Record<string, boolean>>('home-subparts-open', {});
+  1556→  const [showClearConfirm, setShowClearConfirm] = useState(false);
+  1557→  const [isLoading, setIsLoading] = useState(false);
+  1558→  const [editingPhoto, setEditingPhoto] = useState<{ categoryId: string; photo: PhotoData; editMode: 'primary' | 'secondary' | 'dual' } | null>(null);
+  1559→  const [showMovePhotoDialog, setShowMovePhotoDialog] = useState<{ categoryId: string; photoId: string; currentIndex: number } | null>(null);
+  1560→  const [movePhotoToIndex, setMovePhotoToIndex] = useState(0);
+  1561→  const [showEmailDialog, setShowEmailDialog] = useState(false);
+  1562→  const [fullscreenImage, setFullscreenImage] = useState<string | null>(null);
+  1563→  const [cameraStream, setCameraStream] = useState<MediaStream | null>(null);
+  1564→  const [showCamera, setShowCamera] = useState(false);
+  1565→  const [cameraTarget, setCameraTarget] = useState<{ categoryId: string; photoId: string } | null>(null);
+  1566→  const [showExportDialog, setShowExportDialog] = useState(false);
+  1567→  const [showDataDialog, setShowDataDialog] = useState(false);
+  1568→  const [isTranslating, setIsTranslating] = useState(false);
+  1569→  const [showTranslateDialog, setShowTranslateDialog] = useState(false);
+  1570→  const [translateProgress, setTranslateProgress] = useState({ current: 0, total: 0, status: '' });
+  1571→
+  1572→  const fileInputRef = useRef<HTMLInputElement>(null);
+  1573→  const fileImportRef = useRef<HTMLInputElement>(null);
+  1574→  // Função para traduzir todos os textos dinâmicos - HomeContent
+  1575→  const handleTranslateAllHome = async (targetLang: Language) => {
+  1576→    setShowTranslateDialog(true);
+  1577→    setIsTranslating(true);
+  1578→    
+  1579→    try {
+  1580→      // Coletar todos os textos para traduzir
+  1581→      const textItems: { id: string; text: string; type: string }[] = [];
+  1582→      
+  1583→      // Textos da inspeção
+  1584→      if (inspection.descricao?.trim()) {
+  1585→        textItems.push({ id: 'inspection.descricao', text: inspection.descricao, type: 'inspection' });
+  1586→      }
+  1587→      if (inspection.osExecucao?.trim()) {
+  1588→        textItems.push({ id: 'inspection.osExecucao', text: inspection.osExecucao, type: 'inspection' });
+  1589→      }
+  1590→      if (inspection.inspetor?.trim()) {
+  1591→        textItems.push({ id: 'inspection.inspetor', text: inspection.inspetor, type: 'inspection' });
+  1592→      }
+  1593→      if (inspection.cliente?.trim()) {
+  1594→        textItems.push({ id: 'inspection.cliente', text: inspection.cliente, type: 'inspection' });
+  1595→      }
+  1596→      
+  1597→      // Textos das categorias e fotos
+  1598→      categories.forEach((category) => {
+  1599→        category.photos.forEach((photo) => {
+  1600→          if (photo.description?.trim()) {
+  1601→            textItems.push({ id: `photo.${category.id}.${photo.id}.description`, text: photo.description, type: 'photo' });
+  1602→          }
+  1603→          if (photo.partName?.trim()) {
+  1604→            textItems.push({ id: `photo.${category.id}.${photo.id}.partName`, text: photo.partName, type: 'photo' });
+  1605→          }
+  1606→        });
+  1607→        
+  1608→        // Peças adicionais
+  1609→        category.additionalParts?.forEach((part) => {
+  1610→          if (part.partName?.trim()) {
+  1611→            textItems.push({ id: `part.${category.id}.${part.id}.partName`, text: part.partName, type: 'part' });
+  1612→          }
+  1613→        });
+  1614→      });
+  1615→      
+  1616→      // Conclusão
+  1617→      if (conclusion?.trim()) {
+  1618→        textItems.push({ id: 'conclusion', text: conclusion, type: 'conclusion' });
+  1619→      }
+  1620→      
+  1621→      const total = textItems.length;
+  1622→      setTranslateProgress({ current: 0, total, status: `Encontrados ${total} textos para traduzir` });
+  1623→      
+  1624→      if (total === 0) {
+  1625→        alert('Nenhum texto encontrado para traduzir!');
+  1626→        setShowTranslateDialog(false);
+  1627→        setIsTranslating(false);
+  1628→        return;
+  1629→      }
+  1630→      
+  1631→      // Enviar todos os textos para tradução
+  1632→      setTranslateProgress({ current: 0, total, status: 'Enviando para API de tradução...' });
+  1633→      
+  1634→      const response = await fetch('/api/translate-content', {
+  1635→        method: 'POST',
+  1636→        headers: { 'Content-Type': 'application/json' },
+  1637→        body: JSON.stringify({
+  1638→          texts: textItems.map(item => item.text),
+  1639→          targetLanguage: targetLang,
+  1640→        }),
+  1641→      });
+  1642→      
+  1643→      if (!response.ok) {
+  1644→        const errorData = await response.json().catch(() => ({}));
+  1645→        throw new Error(errorData.message || `Erro na API: ${response.status}`);
+  1646→      }
+  1647→      
+  1648→      const data = await response.json();
+  1649→      const translations: string[] = data.translations || [];
+  1650→      
+  1651→      setTranslateProgress({ current: total, total, status: 'Aplicando traduções...' });
+  1652→      
+  1653→      // Aplicar traduções de volta
+  1654→      for (let i = 0; i < textItems.length; i++) {
+  1655→        const item = textItems[i];
+  1656→        const translation = translations[i] || item.text;
+  1657→        
+  1658→        if (item.id === 'inspection.descricao') {
+  1659→          updateInspection({ descricao: translation });
+  1660→        } else if (item.id === 'inspection.osExecucao') {
+  1661→          updateInspection({ osExecucao: translation });
+  1662→        } else if (item.id === 'inspection.inspetor') {
+  1663→          updateInspection({ inspetor: translation });
+  1664→        } else if (item.id === 'inspection.cliente') {
+  1665→          updateInspection({ cliente: translation });
+  1666→        } else if (item.id === 'conclusion') {
+  1667→          setConclusion(translation);
+  1668→        } else if (item.id.startsWith('photo.')) {
+  1669→          const [, categoryId, photoId, field] = item.id.split('.');
+  1670→          if (field === 'description') {
+  1671→            updatePhotoInCategory(categoryId, photoId, { description: translation });
+  1672→          } else if (field === 'partName') {
+  1673→            updatePhotoInCategory(categoryId, photoId, { partName: translation });
+  1674→          }
+  1675→        } else if (item.id.startsWith('part.')) {
+  1676→          const [, categoryId, partId] = item.id.split('.');
+  1677→          const category = categories.find(c => c.id === categoryId);
+  1678→          if (category) {
+  1679→            const partIndex = category.additionalParts?.findIndex(p => p.id === partId) ?? -1;
+  1680→            if (partIndex !== -1 && category.additionalParts) {
+  1681→              const updatedParts = [...category.additionalParts];
+  1682→              updatedParts[partIndex] = { ...updatedParts[partIndex], partName: translation };
+  1683→              // Update via store if available, otherwise skip
+  1684→            }
+  1685→          }
+  1686→        }
+  1687→      }
+  1688→      
+  1689→      setTranslateProgress({ current: total, total, status: 'Tradução concluída!' });
+  1690→      
+  1691→      setTimeout(() => {
+  1692→        setShowTranslateDialog(false);
+  1693→        alert(`✅ Tradução concluída!\n\n${total} textos traduzidos para ${LANGUAGE_NAMES[targetLang]}`);
+  1694→      }, 500);
+  1695→      
+  1696→    } catch (error) {
+  1697→      console.error('Erro ao traduzir:', error);
+  1698→      alert('Erro ao traduzir o conteúdo: ' + (error instanceof Error ? error.message : 'Erro desconhecido'));
+  1699→      setShowTranslateDialog(false);
+  1700→    }
+  1701→    setIsTranslating(false);
+  1702→  };
+  1703→
+  1704→  // Função para abrir o diálogo de tradução
+  1705→  const handleTranslateContentHome = () => {
+  1706→    setShowTranslateDialog(true);
+  1707→  };
+  1708→
+  1709→  const handleTagChange = (tag: string) => {
+  1710→    updateInspection({ tag });
+  1711→    if (tag && MACHINE_DATA[tag]) {
+  1712→      const machine = MACHINE_DATA[tag];
+  1713→      updateInspection({ modelo: machine.modelo, sn: machine.sn, entrega: machine.entrega, cliente: machine.cliente });
+  1714→    }
+  1715→  };
+  1716→
+  1717→  const handlePhotoUpload = (categoryId: string, photoId: string, file: File) => {
+  1718→    const reader = new FileReader();
+  1719→    reader.onload = (e) => { updatePhotoInCategory(categoryId, photoId, { imageData: e.target?.result as string, editedImageData: null }); };
+  1720→    reader.readAsDataURL(file);
+  1721→    setShowPhotoOptions(null);
+  1722→  };
+  1723→
+  1724→  const handlePaste = useCallback(async (categoryId: string, photoId: string) => {
+  1725→    try {
+  1726→      const clipboardItems = await navigator.clipboard.read();
+  1727→      for (const item of clipboardItems) {
+  1728→        for (const type of item.types) {
+  1729→          if (type.startsWith('image/')) {
+  1730→            const blob = await item.getType(type);
+  1731→            const reader = new FileReader();
+  1732→            reader.onload = (e) => { updatePhotoInCategory(categoryId, photoId, { imageData: e.target?.result as string, editedImageData: null }); };
+  1733→            reader.readAsDataURL(blob);
+  1734→          }
+  1735→        }
+  1736→      }
+  1737→    } catch (err) { console.error('Failed to paste:', err); }
+  1738→    setShowPhotoOptions(null);
+  1739→  }, [updatePhotoInCategory]);
+  1740→
+  1741→  // Camera functions
+  1742→  const openCamera = async () => {
+  1743→    try {
+  1744→      const stream = await navigator.mediaDevices.getUserMedia({ 
+  1745→        video: { facingMode: 'environment' } 
+  1746→      });
+  1747→      setCameraStream(stream);
+  1748→      setShowCamera(true);
+  1749→    } catch (err) {
+  1750→      console.error('Erro ao abrir câmera:', err);
+  1751→      alert('Não foi possível acessar a câmera. Verifique as permissões.');
+  1752→    }
+  1753→  };
+  1754→
+  1755→  const closeCamera = () => {
+  1756→    if (cameraStream) {
+  1757→      cameraStream.getTracks().forEach(track => track.stop());
+  1758→      setCameraStream(null);
+  1759→    }
+  1760→    setShowCamera(false);
+  1761→    setCameraTarget(null);
+  1762→  };
+  1763→
+  1764→  const capturePhoto = () => {
+  1765→    const video = document.getElementById('camera-video-home') as HTMLVideoElement;
+  1766→    if (!video || !cameraTarget) return;
+  1767→    
+  1768→    const canvas = document.createElement('canvas');
+  1769→    canvas.width = video.videoWidth;
+  1770→    canvas.height = video.videoHeight;
+  1771→    const ctx = canvas.getContext('2d');
+  1772→    if (ctx) {
+  1773→      ctx.drawImage(video, 0, 0);
+  1774→      const imageData = canvas.toDataURL('image/png');
+  1775→      updatePhotoInCategory(cameraTarget.categoryId, cameraTarget.photoId, { imageData, editedImageData: null });
+  1776→    }
+  1777→    
+  1778→    closeCamera();
+  1779→    setShowPhotoOptions(null);
+  1780→  };
+  1781→
+  1782→  // Ctrl+V listener removido - colar foto apenas pelo botão "Colar da área de transferência"
+  1783→
+  1784→  const handleClearReport = () => { clearAll(); setShowClearConfirm(false); onRegenerateId(); };
+  1785→
+  1786→  const handleExport = () => {
+  1787→    // Export ALL data including photos (base64), categories, inspection, conclusion
+  1788→    const data = { 
+  1789→      version: '1.0',
+  1790→      exportDate: new Date().toISOString(),
+  1791→      inspection, 
+  1792→      categories, 
+  1793→      conclusion 
+  1794→    };
+  1795→    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+  1796→    const url = URL.createObjectURL(blob);
+  1797→    const a = document.createElement('a');
+  1798→    a.href = url;
+  1799→    a.download = `Relatorio_${sanitizeForFilename(inspection.descricao || inspection.tag)}_${reportId}_${new Date().toISOString().split('T')[0]}.json`;
+  1800→    a.click();
+  1801→    URL.revokeObjectURL(url);
+  1802→  };
+  1803→
+  1804→  const handleImport = (e: React.ChangeEvent<HTMLInputElement>) => {
+  1805→    const file = e.target.files?.[0];
+  1806→    if (!file) return;
+  1807→    // Check if there's existing data that might conflict
+  1808→    const hasExistingData = inspection.tag || inspection.cliente || categories.some(cat => 
+  1809→      cat.photos.some(p => p.imageData || p.pn || p.description || p.partName) || 
+  1810→      cat.additionalParts.length > 0
+  1811→    ) || conclusion;
+  1812→    if (hasExistingData) {
+  1813→      if (!confirm('Já existe um relatório em andamento. Deseja substituí-lo pelo arquivo importado? Os dados atuais serão perdidos.')) {
+  1814→        e.target.value = '';
+  1815→        return;
+  1816→      }
+  1817→      // Clear existing data before importing to prevent conflicts
+  1818→      clearAll();
+  1819→    }
+  1820→    const reader = new FileReader();
+  1821→    reader.onload = (event) => {
+  1822→      try {
+  1823→        const data = JSON.parse(event.target?.result as string);
+  1824→        // Import inspection data
+  1825→        if (data.inspection) {
+  1826→          Object.keys(data.inspection).forEach(key => {
+  1827→            updateInspection({ [key]: data.inspection[key] });
+  1828→          });
+  1829→        }
+  1830→        // Import categories with all photos and additional parts
+  1831→        if (data.categories && Array.isArray(data.categories)) {
+  1832→          // Fix sub-part associations: set photoId on sub-parts
+  1833→          data.categories.forEach((cat: any) => {
+  1834→            if (cat.additionalParts && cat.additionalParts.length > 0) {
+  1835→              cat.additionalParts.forEach((ap: any) => {
+  1836→                if (ap.parentPn) {
+  1837→                  const match = cat.photos.find((p: any) => p.pn === ap.parentPn);
+  1838→                  if (match) ap.photoId = match.id;
+  1839→                }
+  1840→              });
+  1841→            }
+  1842→          });
+  1843→
+  1844→          setCategories(data.categories);
+  1845→          // Auto-expand sub-parts sections for photos that have them
+  1846→          const expandMap: Record<string, boolean> = {};
+  1847→          data.categories.forEach((cat: any) => {
+  1848→            if (cat.additionalParts && cat.additionalParts.length > 0) {
+  1849→              cat.photos.forEach((photo: any) => {
+  1850→                const hasSub = photoHasSubPartData(photo, cat.additionalParts);
+  1851→                if (hasSub) expandMap[`${cat.id}-${photo.id}`] = true;
+  1852→              });
+  1853→            }
+  1854→          });
+  1855→          if (Object.keys(expandMap).length > 0) {
+  1856→            setShowAdditionalParts(prev => ({ ...prev, ...expandMap }));
+  1857→          }
+  1858→        }
+  1859→        // Import conclusion
+  1860→        if (data.conclusion !== undefined) setConclusion(data.conclusion);
+  1861→      } catch (err) { 
+  1862→        console.error('Failed to import:', err);
+  1863→        alert('Erro ao importar arquivo. Verifique se o arquivo é válido.');
+  1864→      }
+  1865→      // Reset input to allow re-importing same file
+  1866→      e.target.value = '';
+  1867→    };
+  1868→    reader.onerror = () => {
+  1869→      alert('Erro ao ler o arquivo.');
+  1870→      e.target.value = '';
+  1871→    };
+  1872→    reader.readAsText(file);
+  1873→  };
+  1874→
+  1875→  // Função para mover foto para posição específica
+  1876→  const handleMovePhotoToPosition = () => {
+  1877→    if (movePhotoFromIndex === null) return;
+  1878→    if (movePhotoFromIndex === movePhotoToIndex) {
+  1879→      setShowMovePhotoDialog(false);
+  1880→      setMovePhotoFromIndex(null);
+  1881→      return;
+  1882→    }
+  1883→    
+  1884→    movePhoto(movePhotoFromIndex, movePhotoToIndex);
+  1885→    setShowMovePhotoDialog(false);
+  1886→    setMovePhotoFromIndex(null);
+  1887→  };
+  1888→
+  1889→  const handleGeneratePPT = async () => {
+  1890→    setIsLoading(true);
+  1891→    try {
+  1892→      // Translate dynamic texts if not in Portuguese
+  1893→      if (language !== 'pt') {
+  1894→        const { translateDynamic, translateDynamicBatch } = useTranslationStore.getState();
+  1895→        
+  1896→        // Translate all inspection text fields
+  1897→        const translatedInspection = { ...inspection };
+  1898→        if (inspection.descricao) {
+  1899→          translatedInspection.descricao = await translateDynamic(inspection.descricao);
+  1900→        }
+  1901→        if (inspection.osExecucao) {
+  1902→          translatedInspection.osExecucao = await translateDynamic(inspection.osExecucao);
+  1903→        }
+  1904→        if (inspection.inspetor) {
+  1905→          translatedInspection.inspetor = await translateDynamic(inspection.inspetor);
+  1906→        }
+  1907→        if (inspection.cliente) {
+  1908→          translatedInspection.cliente = await translateDynamic(inspection.cliente);
+  1909→        }
+  1910→        
+  1911→        // Translate all category photos
+  1912→        const translatedCategories = await Promise.all(categories.map(async (category) => {
+  1913→          const translatedPhotos = await Promise.all(category.photos.map(async (photo) => {
+  1914→            const translatedPhoto = { ...photo };
+  1915→            if (photo.description) {
+  1916→              translatedPhoto.description = await translateDynamic(photo.description);
+  1917→            }
+  1918→            if (photo.partName) {
+  1919→              translatedPhoto.partName = await translateDynamic(photo.partName);
+  1920→            }
+  1921→            return translatedPhoto;
+  1922→          }));
+  1923→          
+  1924→          const translatedAdditionalParts = await Promise.all(category.additionalParts.map(async (part) => {
+  1925→            const translatedPart = { ...part };
+  1926→            if (part.partName) {
+  1927→              translatedPart.partName = await translateDynamic(part.partName);
+  1928→            }
+  1929→            return translatedPart;
+  1930→          }));
+  1931→          
+  1932→          return {
+  1933→            ...category,
+  1934→            photos: translatedPhotos,
+  1935→            additionalParts: translatedAdditionalParts,
+  1936→          };
+  1937→        }));
+  1938→        
+  1939→        // Translate conclusion
+  1940→        const translatedConclusion = conclusion ? await translateDynamic(conclusion) : conclusion;
+  1941→        
+  1942→        await generateHomePowerPoint({ 
+  1943→          inspection: translatedInspection, 
+  1944→          categories: translatedCategories, 
+  1945→          conclusion: translatedConclusion,
+  1946→          language,
+  1947→          reportId
+  1948→        });
+  1949→        // Auto-download Excel parts table
+  1950→        exportPartsTableToExcelHome(translatedInspection, translatedCategories, reportId);
+  1951→      } else {
+  1952→        await generateHomePowerPoint({ inspection, categories, conclusion, language: 'pt', reportId });
+  1953→        // Auto-download Excel parts table
+  1954→        exportPartsTableToExcelHome(inspection, categories, reportId);
+  1955→      }
+  1956→    } catch (error) { 
+  1957→      console.error('Error generating PowerPoint:', error); 
+  1958→    }
+  1959→    setIsLoading(false);
+  1960→  };
+  1961→
+  1962→  // Email handlers
+  1963→  const handleSendAnalysisEmail = () => {
+  1964→    const subject = generateEmailSubject(inspection, 'analysis', reportId);
+  1965→    const body = generateAnalysisEmailBody(inspection, [], [], categories, reportId);
+  1966→    openEmailClient({
+  1967→      to: EMAIL_CONFIG.analysisRecipients,
+  1968→      cc: EMAIL_CONFIG.analysisCc,
+  1969→      subject,
+  1970→      body,
+  1971→    });
+  1972→    setShowEmailDialog(false);
+  1973→  };
+  1974→
+  1975→  const handleSendConclusionEmail = () => {
+  1976→    const subject = generateEmailSubject(inspection, 'conclusion', reportId);
+  1977→    const body = generateConclusionEmailBody(inspection, conclusion, [], [], categories, reportId);
+  1978→    openEmailClient({
+  1979→      to: EMAIL_CONFIG.conclusionRecipients,
+  1980→      cc: EMAIL_CONFIG.conclusionCc,
+  1981→      subject,
+  1982→      body,
+  1983→    });
+  1984→    setShowEmailDialog(false);
+  1985→  };
+  1986→
+  1987→  const toggleCategory = (categoryId: string) => {
+  1988→    setExpandedCategories(prev => ({ ...prev, [categoryId]: !prev[categoryId] }));
+  1989→  };
+  1990→
+  1991→  return (
+  1992→    <>
+  1993→      {/* Action Buttons - Responsivo */}
+  1994→      <div className="fixed top-20 right-4 md:flex flex-col gap-2 z-40 hidden">
+  1995→        <Button size="icon" className="rounded-full bg-red-600 hover:bg-red-700" onClick={() => setShowClearConfirm(true)} title={t('action.clear')}><Trash2 className="h-5 w-5" /></Button>
+  1996→        
+  1997→        {/* Botão de Traduzir */}
+  1998→        <Button 
+  1999→          size="icon" 
+  2000→          className="rounded-full bg-cyan-600 hover:bg-cyan-700" 
+  2001→          onClick={handleTranslateContentHome} 
+  2002→          disabled={isTranslating}
+  2003→          title={t('action.translate')}
+  2004→        >
+  2005→          {isTranslating ? <Loader2 className="h-5 w-5 animate-spin" /> : <Globe className="h-5 w-5" />}
+  2006→        </Button>
+  2007→        
+  2008→        {/* Botão de Dados (Importar/Exportar JSON) */}
+  2009→        <Button size="icon" className="rounded-full bg-blue-600 hover:bg-blue-700" onClick={() => setShowDataDialog(true)} title={t('action.importExport')}><FileDown className="h-5 w-5" /></Button>
+  2010→        
+  2011→        {/* Botão de Exportar (PDF/RDO) */}
+  2012→        <Button size="icon" className="rounded-full bg-purple-600 hover:bg-purple-700" onClick={() => setShowExportDialog(true)} title={t('action.download')}><Download className="h-5 w-5" /></Button>
+  2013→        
+  2014→        <Button size="icon" className="rounded-full bg-orange-500 hover:bg-orange-600" onClick={() => setShowEmailDialog(true)} title="Enviar Email"><Mail className="h-5 w-5" /></Button>
+  2015→      </div>
+  2016→      
+  2017→      {/* Mobile Action Bar - Botão flutuante */}
+  2018→      <MobileActionMenu
+  2019→        onAddPhoto={() => addPhotoToCategory(categories[0]?.id || '')}
+  2020→        onDataDialog={() => setShowDataDialog(true)}
+  2021→        onExportDialog={() => setShowExportDialog(true)}
+  2022→        onEmailDialog={() => setShowEmailDialog(true)}
+  2023→        onClearConfirm={() => setShowClearConfirm(true)}
+  2024→        reportData={{ inspection, categories, conclusion }}
+  2025→        reportType="home"
+  2026→        t={t}
+  2027→      />
+  2028→      <input ref={fileInputRef} type="file" accept="image/*" multiple onChange={handleImport} className="hidden" />
+  2029→      <input ref={fileImportRef} type="file" accept=".json" onChange={handleImport} className="hidden" />
+  2030→
+  2031→      {/* Export Dialog - PDF/RDO */}
+  2032→      <Dialog open={showExportDialog} onOpenChange={setShowExportDialog}>
+  2033→        <DialogContent className="max-w-[90vw] md:max-w-md">
+  2034→          <DialogHeader>
+  2035→            <DialogTitle className="text-lg flex items-center gap-2">
+  2036→              <Download className="h-5 w-5 text-orange-500" />
+  2037→              {t('action.download')}
+  2038→            </DialogTitle>
+  2039→            <DialogDescription>{t('action.downloadDesc')}</DialogDescription>
+  2040→          </DialogHeader>
+  2041→          <div className="space-y-3 pt-4">
+  2042→            <Button 
+  2043→              className="w-full justify-start h-16 md:h-14 text-left" 
+  2044→              variant="outline"
+  2045→              onClick={() => { handleGeneratePPT(); setShowExportDialog(false); }}
+  2046→              disabled={isLoading}
+  2047→            >
+  2048→              <div className="flex items-center gap-3">
+  2049→                <div className="w-10 h-10 md:w-8 md:h-8 rounded-full bg-purple-100 flex items-center justify-center flex-shrink-0">
+  2050→                  <FileImage className="h-5 w-5 md:h-4 md:w-4 text-purple-600" />
+  2051→                </div>
+  2052→                <div>
+  2053→                  <p className="font-medium">{t('rdo.powerpoint')}</p>
+  2054→                  <p className="text-xs text-gray-500">{t('action.pptDesc')}</p>
+  2055→                </div>
+  2056→              </div>
+  2057→            </Button>
+  2058→            
+  2059→            <Button 
+  2060→              className="w-full justify-start h-16 md:h-14 text-left" 
+  2061→              variant="outline"
+  2062→              onClick={() => { alert('🚧 Relatório RDO está em construção. Em breve estará disponível!'); }}
+  2063→            >
+  2064→              <div className="flex items-center gap-3">
+  2065→                <div className="w-10 h-10 md:w-8 md:h-8 rounded-full bg-gray-100 flex items-center justify-center flex-shrink-0">
+  2066→                  <FileText className="h-5 w-5 md:h-4 md:w-4 text-gray-400" />
+  2067→                </div>
+  2068→                <div className="text-left">
+  2069→                  <p className="font-medium text-gray-400">{t('rdo.executive')} 🚧</p>
+  2070→                  <p className="text-xs text-gray-400">Em construção...</p>
+  2071→                </div>
+  2072→              </div>
+  2073→            </Button>
+  2074→          </div>
+  2075→          <DialogFooter>
+  2076→            <Button variant="outline" onClick={() => setShowExportDialog(false)}>{t('action.cancel')}</Button>
+  2077→          </DialogFooter>
+  2078→        </DialogContent>
+  2079→      </Dialog>
+  2080→
+  2081→      {/* Data Dialog - Import/Export JSON */}
+  2082→      <Dialog open={showDataDialog} onOpenChange={setShowDataDialog}>
+  2083→        <DialogContent className="max-w-[90vw] md:max-w-md">
+  2084→          <DialogHeader>
+  2085→            <DialogTitle className="text-lg flex items-center gap-2">
+  2086→              <FileDown className="h-5 w-5 text-blue-500" />
+  2087→              {t('action.importExport')}
+  2088→            </DialogTitle>
+  2089→            <DialogDescription>{t('action.importExportDesc')}</DialogDescription>
+  2090→          </DialogHeader>
+  2091→          <div className="space-y-3 pt-4">
+  2092→            <Button 
+  2093→              className="w-full justify-start h-16 md:h-14 text-left" 
+  2094→              variant="outline"
+  2095→              onClick={() => { handleExport(); setShowDataDialog(false); }}
+  2096→            >
+  2097→              <div className="flex items-center gap-3">
+  2098→                <div className="w-10 h-10 md:w-8 md:h-8 rounded-full bg-green-100 flex items-center justify-center flex-shrink-0">
+  2099→                  <Download className="h-5 w-5 md:h-4 md:w-4 text-green-600" />
+  2100→                </div>
+  2101→                <div>
+  2102→                  <p className="font-medium">{t('action.exportJson')}</p>
+  2103→                  <p className="text-xs text-gray-500">{t('action.exportJsonDesc')}</p>
+  2104→                </div>
+  2105→              </div>
+  2106→            </Button>
+  2107→            
+  2108→            <Button 
+  2109→              className="w-full justify-start h-16 md:h-14 text-left" 
+  2110→              variant="outline"
+  2111→              onClick={() => { fileImportRef.current?.click(); setShowDataDialog(false); }}
+  2112→            >
+  2113→              <div className="flex items-center gap-3">
+  2114→                <div className="w-10 h-10 md:w-8 md:h-8 rounded-full bg-blue-100 flex items-center justify-center flex-shrink-0">
+  2115→                  <Upload className="h-5 w-5 md:h-4 md:w-4 text-blue-600" />
+  2116→                </div>
+  2117→                <div>
+  2118→                  <p className="font-medium">{t('action.importJson')}</p>
+  2119→                  <p className="text-xs text-gray-500">{t('action.importJsonDesc')}</p>
+  2120→                </div>
+  2121→              </div>
+  2122→            </Button>
+  2123→          </div>
+  2124→          <DialogFooter>
+  2125→            <Button variant="outline" onClick={() => setShowDataDialog(false)}>{t('action.cancel')}</Button>
+  2126→          </DialogFooter>
+  2127→        </DialogContent>
+  2128→      </Dialog>
+  2129→
+  2130→      {/* Email Options Dialog */}
+  2131→      <Dialog open={showEmailDialog} onOpenChange={setShowEmailDialog}>
+  2132→        <DialogContent className="max-w-[90vw] md:max-w-lg">
+  2133→          <DialogHeader>
+  2134→            <DialogTitle className="text-lg">Enviar Email</DialogTitle>
+  2135→            <DialogDescription>Selecione o tipo de email que deseja enviar:</DialogDescription>
+  2136→          </DialogHeader>
+  2137→          <div className="space-y-3 pt-4">
+  2138→            <Button 
+  2139→              className="w-full justify-start h-16 md:h-14 text-left" 
+  2140→              variant="outline"
+  2141→              onClick={handleSendAnalysisEmail}
+  2142→            >
+  2143→              <div className="flex items-center gap-3">
+  2144→                <div className="w-10 h-10 md:w-8 md:h-8 rounded-full bg-amber-100 flex items-center justify-center flex-shrink-0">
+  2145→                  <Mail className="h-5 w-5 md:h-4 md:w-4 text-amber-600" />
+  2146→                </div>
+  2147→                <div>
+  2148→                  <div className="font-semibold">Análise</div>
+  2149→                  <div className="text-xs text-gray-500">Envia para Wallysson, Emerson e Jadson</div>
+  2150→                </div>
+  2151→              </div>
+  2152→            </Button>
+  2153→            <Button 
+  2154→              className="w-full justify-start h-16 md:h-14 text-left" 
+  2155→              variant="outline"
+  2156→              onClick={handleSendConclusionEmail}
+  2157→            >
+  2158→              <div className="flex items-center gap-3">
+  2159→                <div className="w-10 h-10 md:w-8 md:h-8 rounded-full bg-emerald-100 flex items-center justify-center flex-shrink-0">
+  2160→                  <Mail className="h-5 w-5 md:h-4 md:w-4 text-emerald-600" />
+  2161→                </div>
+  2162→                <div>
+  2163→                  <div className="font-semibold">Concluído</div>
+  2164→                  <div className="text-xs text-gray-500">Envia para todos os destinatários</div>
+  2165→                </div>
+  2166→              </div>
+  2167→            </Button>
+  2168→          </div>
+  2169→        </DialogContent>
+  2170→      </Dialog>
+  2171→
+  2172→      {/* Cover Page */}
+  2173→      <section className="p-8">
+  2174→        <Card className="max-w-4xl mx-auto">
+  2175→          <CardHeader><CardTitle className="text-2xl font-bold">{t('report.technicalReport')}</CardTitle></CardHeader>
+  2176→          <CardContent className="space-y-6">
+  2177→            {/* Machine Information */}
+  2178→            <div className="space-y-4">
+  2179→              <h3 className="text-lg font-semibold flex items-center gap-2"><Package className="h-5 w-5 text-orange-500" />{t('report.executionInfo')}</h3>
+  2180→              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+  2181→                <div className="space-y-2"><Label>{t('report.tag')}</Label><Input list="tag-options-home" value={inspection.tag} onChange={(e) => handleTagChange(e.target.value)} placeholder={t('placeholder.tag')} /><datalist id="tag-options-home">{TAG_OPTIONS.map(tag => (<option key={tag} value={tag} />))}</datalist></div>
+  2182→                <div className="space-y-2"><Label>{t('report.modelo')}</Label><Input value={inspection.modelo} onChange={(e) => updateInspection({ modelo: e.target.value })} placeholder={t('placeholder.modelo')} /></div>
+  2183→                <div className="space-y-2"><Label>{t('report.sn')}</Label><Input value={inspection.sn} onChange={(e) => updateInspection({ sn: e.target.value })} placeholder={t('placeholder.sn')} /></div>
+  2184→                <div className="space-y-2"><Label>{t('report.entrega')}</Label><Input value={inspection.entrega} onChange={(e) => updateInspection({ entrega: e.target.value })} placeholder={t('placeholder.entrega')} /></div>
+  2185→                <div className="space-y-2"><Label>{t('report.cliente')}</Label><Input value={inspection.cliente} onChange={(e) => updateInspection({ cliente: e.target.value })} placeholder={t('placeholder.cliente')} /></div>
+  2186→                <div className="space-y-2"><Label>{t('report.descricao')}</Label><Input value={inspection.descricao} onChange={(e) => updateInspection({ descricao: e.target.value })} placeholder={t('placeholder.descricao')} /></div>
+  2187→                <div className="space-y-2"><Label>{t('report.machineDown')}</Label><Select value={inspection.machineDown} onValueChange={(value) => updateInspection({ machineDown: value as 'Yes' | 'No' })}><SelectTrigger><SelectValue placeholder={t('select.selectOption')} /></SelectTrigger><SelectContent><SelectItem value="No">{t('select.no')}</SelectItem><SelectItem value="Yes">{t('select.yes')}</SelectItem></SelectContent></Select></div>
+  2188→              </div>
+  2189→            </div>
+  2190→
+  2191→            <Separator />
+  2192→
+  2193→            {/* Fotos de Identificação da Máquina */}
+  2194→            <div className="space-y-4">
+  2195→              <h3 className="text-lg font-semibold flex items-center gap-2"><Camera className="h-5 w-5 text-orange-500" />{t('machine.identification')}</h3>
+  2196→              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+  2197→                <IdentificationPhoto label={t('machine.equipmentPhoto')} imageData={inspection.machinePhoto} onUpload={(data) => updateInspection({ machinePhoto: data })} onRemove={() => updateInspection({ machinePhoto: null })} caption={inspection.tag || t('machine.equipmentTag')} t={t} />
+  2198→                <IdentificationPhoto label={t('machine.hourMeterPhoto')} imageData={inspection.horimetroPhoto} onUpload={(data) => updateInspection({ horimetroPhoto: data })} onRemove={() => updateInspection({ horimetroPhoto: null })} caption={`${t('report.hourMeter')}: ${inspection.horimetro || '-'}`} t={t} />
+  2199→                <IdentificationPhoto label={t('machine.serialPhoto')} imageData={inspection.serialPhoto || generateSerialNumberImage(inspection.sn)} onUpload={(data) => updateInspection({ serialPhoto: data })} onRemove={() => updateInspection({ serialPhoto: null })} caption={`${t('machine.serialNumber')}: ${inspection.sn || '-'}`} t={t} />
+  2200→                <IdentificationPhoto label={t('machine.localPhoto')} imageData={inspection.localPhoto} onUpload={(data) => updateInspection({ localPhoto: data })} onRemove={() => updateInspection({ localPhoto: null })} t={t} />
+  2201→              </div>
+  2202→            </div>
+  2203→
+  2204→            <Separator />
+  2205→
+  2206→            {/* Execution Information */}
+  2207→            <div className="space-y-4">
+  2208→              <h3 className="text-lg font-semibold flex items-center gap-2"><Clock className="h-5 w-5 text-orange-500" />{t('report.reportData')}</h3>
+  2209→              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+  2210→                <div className="space-y-2"><Label>{t('report.executionDate')}</Label><Input type="date" value={inspection.data} onChange={(e) => updateInspection({ data: e.target.value })} /></div>
+  2211→                <div className="space-y-2"><Label>{t('report.endDateOptional')}</Label><Input type="date" value={inspection.dataFinal} onChange={(e) => updateInspection({ dataFinal: e.target.value })} /></div>
+  2212→                <div className="space-y-2"><Label>{t('report.workOrderOptional')}</Label><Input value={inspection.osExecucao} onChange={(e) => updateInspection({ osExecucao: e.target.value })} placeholder={t('placeholder.os')} /></div>
+  2213→                <div className="space-y-2"><Label>{t('report.performers')}</Label><Input value={inspection.inspetor} onChange={(e) => updateInspection({ inspetor: e.target.value })} placeholder={t('placeholder.inspector')} /></div>
+  2214→                <div className="space-y-2"><Label>{t('report.hourMeter')}</Label><Input value={inspection.horimetro} onChange={(e) => updateInspection({ horimetro: e.target.value })} placeholder={t('placeholder.hourmeter')} /></div>
+  2215→              </div>
+  2216→            </div>
+  2217→          </CardContent>
+  2218→        </Card>
+  2219→      </section>
+  2220→
+  2221→      {/* Categorized Photos Section */}
+  2222→      <section className="p-8 bg-gray-50">
+  2223→        <div className="max-w-6xl mx-auto">
+  2224→          <h2 className="text-2xl font-bold flex items-center gap-2 mb-6">
+  2225→            <Camera className="h-6 w-6 text-orange-500" />
+  2226→            {t('photos.title')}
+  2227→          </h2>
+  2228→
+  2229→          {/* Categories */}
+  2230→          <div className="space-y-4">
+  2231→            {categories.map((category, catIndex) => (
+  2232→              <Collapsible key={category.id} open={expandedCategories[category.id] ?? false} onOpenChange={() => toggleCategory(category.id)}>
+  2233→                <Card>
+  2234→                  <CollapsibleTrigger asChild>
+  2235→                    <CardHeader className="cursor-pointer hover:bg-gray-50">
+  2236→                      <div className="flex items-center justify-between">
+  2237→                        <div className="flex items-center gap-3">
+  2238→                          <div className="w-10 h-10 rounded-full bg-orange-500 flex items-center justify-center text-white font-bold">
+  2239→                            {catIndex + 1}
+  2240→                          </div>
+  2241→                          <div>
+  2242→                            <CardTitle className="text-lg">{t(`category.${category.id}`, { defaultValue: category.title })}</CardTitle>
+  2243→                            <p className="text-sm text-gray-500">{t(`category.${category.id}Desc`, { defaultValue: category.description })}</p>
+  2244→                          </div>
+  2245→                        </div>
+  2246→                        <div className="flex items-center gap-2">
+  2247→                          <Badge variant="secondary">{t('photos.photoCount', { count: category.photos.filter(p => p.imageData).length })}</Badge>
+  2248→                          {expandedCategories[category.id] ? <ChevronUp className="h-5 w-5 text-gray-500" /> : <ChevronDown className="h-5 w-5 text-gray-500" />}
+  2249→                        </div>
+  2250→                      </div>
+  2251→                    </CardHeader>
+  2252→                  </CollapsibleTrigger>
+  2253→                  <CollapsibleContent>
+  2254→                    <CardContent className="pt-0">
+  2255→                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+  2256→                        {category.photos.map((photo, index) => (
+  2257→                          <Card key={photo.id} className="overflow-hidden group border-2 border-gray-200">
+  2258→                            <div className="p-3 bg-black/5 space-y-2">
+  2259→                              <div className="flex items-center justify-between">
+  2260→                                <span className="text-xs font-semibold text-gray-600">{t('photos.photo')} {index + 1}</span>
+  2261→                                <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+  2262→                                  {category.photos.length > 1 && (
+  2263→                                    <Button variant="ghost" size="icon" className="h-6 w-6 text-blue-500 hover:text-blue-700" onClick={() => { setShowMovePhotoDialog({ categoryId: category.id, photoId: photo.id, currentIndex: index }); setMovePhotoToIndex(index); }} title="Mover para outra posição"><ArrowUpRight className="h-3.5 w-3.5" /></Button>
+  2264→                                  )}
+  2265→                                  {category.photos.length > 2 && (
+  2266→                                    <Button variant="ghost" size="icon" className="h-6 w-6 text-red-500 hover:text-red-700" onClick={() => removePhotoFromCategory(category.id, photo.id)} title={t('action.remove')}><Trash2 className="h-3.5 w-3.5" /></Button>
+  2267→                                  )}
+  2268→                                </div>
+  2269→                              </div>
+  2270→                              <div className="flex items-center gap-2 flex-wrap">
+  2271→                                <Label className="text-xs font-semibold text-orange-600 whitespace-nowrap">{t('photo.pn')}:</Label>
+  2272→                                <Input className="h-7 text-xs flex-1 min-w-0" value={photo.pn} onChange={(e) => {
+  2273→                                  const oldPn = photo.pn;
+  2274→                                  const newPn = e.target.value;
+  2275→                                  updatePhotoInCategory(category.id, photo.id, { pn: newPn });
+  2276→                                  // Update parentPn of subparts when PN changes
+  2277→                                  if (oldPn !== newPn) {
+  2278→                                    updateAdditionalPartsParentPn(category.id, oldPn, newPn);
+  2279→                                  }
+  2280→                                }} placeholder={t('photo.pnPlaceholder')} />
+  2281→                                <Label className="text-xs whitespace-nowrap">{t('photo.serial')}:</Label>
+  2282→                                <Input className="h-7 text-xs w-24" value={photo.serialNumber || ''} onChange={(e) => updatePhotoInCategory(category.id, photo.id, { serialNumber: e.target.value })} placeholder={t('photo.serialPlaceholder')} />
+  2283→                              </div>
+  2284→                              <div className="flex items-center gap-2">
+  2285→                                <Label className="text-xs">{t('photo.partName')}:</Label>
+  2286→                                <Input className="h-7 text-xs flex-1" value={photo.partName} onChange={(e) => updatePhotoInCategory(category.id, photo.id, { partName: e.target.value })} placeholder={t('photo.partNamePlaceholder')} />
+  2287→                                <Label className="text-xs">{t('photo.quantity')}:</Label>
+  2288→                                <Input className="h-7 text-xs w-16" type="number" value={photo.quantity} onChange={(e) => updatePhotoInCategory(category.id, photo.id, { quantity: e.target.value })} placeholder={t('photo.quantityPlaceholder')} />
+  2289→                              </div>
+  2290→                              <div className="flex items-center gap-2">
+  2291→                                <Label className="text-xs">{t('photo.criticality')}:</Label>
+  2292→                                <Select value={photo.criticality || ''} onValueChange={(v) => updatePhotoInCategory(category.id, photo.id, { criticality: v as Criticality })}>
+  2293→                                  <SelectTrigger className="h-7 text-xs flex-1">
+  2294→                                    <SelectValue placeholder={t('select.selectOption')} />
+  2295→                                  </SelectTrigger>
+  2296→                                  <SelectContent>
+  2297→                                    <SelectItem value="Alta">{t('photo.criticalityHigh')}</SelectItem>
+  2298→                                    <SelectItem value="Média">{t('photo.criticalityMedium')}</SelectItem>
+  2299→                                    <SelectItem value="Baixa">{t('photo.criticalityLow')}</SelectItem>
+  2300→                                  </SelectContent>
+  2301→                                </Select>
+  2302→                              </div>
+  2303→                              <div className="flex items-center gap-2 p-2 bg-amber-100 rounded-lg border-2 border-amber-400">
+  2304→                                <Checkbox id={`subparts-home-${category.id}-${photo.id}`} checked={showAdditionalParts[`${category.id}-${photo.id}`] || photoHasSubPartData(photo, category.additionalParts)} onCheckedChange={(checked) => setShowAdditionalParts(prev => ({ ...prev, [`${category.id}-${photo.id}`]: !!checked }))} className="border-amber-600 data-[state=checked]:bg-amber-500" />
+  2305→                                <Label htmlFor={`subparts-home-${category.id}-${photo.id}`} className="text-sm font-bold text-amber-800 cursor-pointer flex items-center gap-1"><ListTree className="h-4 w-4" /> {t('subparts.title')}</Label>
+  2306→                              </div>
+  2307→                              {(showAdditionalParts[`${category.id}-${photo.id}`] || photoHasSubPartData(photo, category.additionalParts)) && (
+  2308→                                <AdditionalPartsSection parentPn={photo.pn} photoId={photo.id} additionalParts={category.additionalParts} onAddPart={(part) => addAdditionalPartToCategory(category.id, part)} onRemovePart={(id) => removeAdditionalPartFromCategory(category.id, id)} t={t} />
+  2309→                              )}
+  2310→                            </div>
+  2311→                            <div className="relative h-40 bg-gray-200 flex items-center justify-center gap-1 cursor-pointer hover:bg-gray-300 transition-colors">
+  2312→                              {/* Primeira foto */}
+  2313→                              <div className="flex-1 h-full relative" onClick={() => { setShowPhotoOptions({ categoryId: category.id, photoId: photo.id }); }}>
+  2314→                                {photo.imageData ? (
+  2315→                                  <img src={photo.editedImageData || photo.imageData} alt={`${t('photos.photo')} ${index + 1}`} className="w-full h-full object-cover" />
+  2316→                                ) : (
+  2317→                                  <div className="text-center text-gray-500 h-full flex flex-col items-center justify-center">
+  2318→                                    <Camera className="h-10 w-10 mx-auto mb-1" />
+  2319→                                    <p className="text-xs">Foto 1</p>
+  2320→                                  </div>
+  2321→                                )}
+  2322→                                {photo.imageData && (
+  2323→                                  <div className="absolute top-1 right-1 flex gap-1">
+  2324→                                    <Button size="icon" className="rounded-full bg-orange-500 hover:bg-orange-600 h-6 w-6" onClick={(e) => { e.stopPropagation(); setEditingPhoto({ categoryId: category.id, photo, editMode: 'primary' }); }} title={t('action.edit')}><Edit className="h-3 w-3" /></Button>
+  2325→                                    <Button size="icon" className="rounded-full bg-red-600 hover:bg-red-700 h-6 w-6" onClick={(e) => { e.stopPropagation(); updatePhotoInCategory(category.id, photo.id, { imageData: null, editedImageData: null }); }} title={t('action.remove')}><Trash2 className="h-3 w-3" /></Button>
+  2326→                                  </div>
+  2327→                                )}
+  2328→                              </div>
+  2329→                              
+  2330→                              {/* Segunda foto (opcional) */}
+  2331→                              {photo.secondaryImageData && (
+  2332→                                <>
+  2333→                                  <div className="w-px h-full bg-gray-300" />
+  2334→                                  <div className="flex-1 h-full relative" onClick={(e) => { e.stopPropagation(); }}>
+  2335→                                    <img src={photo.secondaryImageData} alt={`Foto 2`} className="w-full h-full object-cover" />
+  2336→                                    <div className="absolute top-1 right-1 flex gap-1">
+  2337→                                      <Button size="icon" className="rounded-full bg-orange-500 hover:bg-orange-600 h-6 w-6" onClick={(e) => { e.stopPropagation(); setEditingPhoto({ categoryId: category.id, photo, editMode: 'secondary' }); }} title={t('action.edit')}><Edit className="h-3 w-3" /></Button>
+  2338→                                      <Button size="icon" className="rounded-full bg-red-600 hover:bg-red-700 h-6 w-6" onClick={(e) => { e.stopPropagation(); updatePhotoInCategory(category.id, photo.id, { secondaryImageData: null }); }} title="Remover segunda foto"><Trash2 className="h-3 w-3" /></Button>
+  2339→                                    </div>
+  2340→                                  </div>
+  2341→                                </>
+  2342→                              )}
+  2343→                              
+  2344→                              {/* Botão para adicionar segunda foto */}
+  2345→                              {photo.imageData && !photo.secondaryImageData && (
+  2346→                                <div className="absolute bottom-1 right-1 flex gap-1">
+  2347→                                  <Button 
+  2348→                                    size="sm" 
+  2349→                                    className="rounded bg-orange-500 hover:bg-orange-600 h-6 text-xs px-2"
+  2350→                                    onClick={(e) => { 
+  2351→                                      e.stopPropagation(); 
+  2352→                                      const input = document.createElement('input');
+  2353→                                      input.type = 'file';
+  2354→                                      input.accept = 'image/*';
+  2355→                                      input.onchange = (ev) => {
+  2356→                                        const file = (ev.target as HTMLInputElement).files?.[0];
+  2357→                                        if (file) {
+  2358→                                          const reader = new FileReader();
+  2359→                                          reader.onload = (event) => {
+  2360→                                            updatePhotoInCategory(category.id, photo.id, { secondaryImageData: event.target?.result as string });
+  2361→                                          };
+  2362→                                          reader.readAsDataURL(file);
+  2363→                                        }
+  2364→                                      };
+  2365→                                      input.click();
+  2366→                                    }}
+  2367→                                  >
+  2368→                                    + Foto
+  2369→                                  </Button>
+  2370→                                </div>
+  2371→                              )}
+  2372→                              
+  2373→                              {/* Botão de edição dupla quando tem duas fotos */}
+  2374→                              {photo.imageData && photo.secondaryImageData && (
+  2375→                                <div className="absolute bottom-1 right-1">
+  2376→                                  <Button 
+  2377→                                    size="sm" 
+  2378→                                    className="rounded bg-purple-500 hover:bg-purple-600 h-6 text-xs px-2"
+  2379→                                    onClick={(e) => { e.stopPropagation(); setEditingPhoto({ categoryId: category.id, photo, editMode: 'dual' }); }}
+  2380→                                    title="Editar ambas as fotos junto"
+  2381→                                  >
+  2382→                                    <Images className="h-3 w-3 mr-1" />
+  2383→                                    Duplo
+  2384→                                  </Button>
+  2385→                                </div>
+  2386→                              )}
+  2387→                              
+  2388→                              {photo.embeddedPhotos && photo.embeddedPhotos.length > 0 && (
+  2389→                                <div className="absolute bottom-1 left-1"><Badge className="bg-orange-500 text-white text-xs"><Circle className="h-3 w-3 mr-1" />{photo.embeddedPhotos.length}</Badge></div>
+  2390→                              )}
+  2391→                            </div>
+  2392→                            <div className="p-2">
+  2393→                              <Textarea
+  2394→                                className="h-14 text-sm"
+  2395→                                placeholder={t('photo.descriptionPlaceholder')}
+  2396→                                value={photo.description}
+  2397→                                onChange={(e) => updatePhotoInCategory(category.id, photo.id, { description: e.target.value })}
+  2398→                              />
+  2399→                            </div>
+  2400→                          </Card>
+  2401→                        ))}
+  2402→                      </div>
+  2403→                      <Button variant="outline" className="mt-4 w-full" onClick={() => addPhotoToCategory(category.id)}>
+  2404→                        <Plus className="h-4 w-4 mr-2" />{t('photos.addPhoto')}
+  2405→                      </Button>
+  2406→                    </CardContent>
+  2407→                  </CollapsibleContent>
+  2408→                </Card>
+  2409→              </Collapsible>
+  2410→            ))}
+  2411→          </div>
+  2412→
+  2413→          {/* Parts Table - All parts from all categories */}
+  2414→          <Card className="mt-8">
+  2415→            <CardHeader className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
+  2416→              <CardTitle className="flex items-center gap-2"><Package className="h-5 w-5 text-orange-500" />{t('partsTable.title')}</CardTitle>
+  2417→              <Button 
+  2418→                size="sm" 
+  2419→                className="bg-green-600 hover:bg-green-700 h-10"
+  2420→                onClick={() => exportPartsTableToExcelHome(inspection, categories, reportId)}
+  2421→              >
+  2422→                <FileSpreadsheet className="h-4 w-4 mr-2" />
+  2423→                {t('partsTable.exportExcel')}
+  2424→              </Button>
+  2425→            </CardHeader>
+  2426→            <CardContent>
+  2427→              {/* Mobile scroll hint */}
+  2428→              <p className="md:hidden text-xs text-gray-500 mb-2 flex items-center gap-1">
+  2429→                ← {t('table.swipe')} →
+  2430→              </p>
+  2431→              <div className="overflow-x-auto -mx-4 px-4 md:mx-0 md:px-0 scroll-smooth" style={{ WebkitOverflowScrolling: 'touch' }}>
+  2432→                <table className="w-full min-w-[600px]">
+  2433→                  <thead><tr className="bg-black text-white"><th className="p-2 md:p-3 text-left text-sm">{t('partsTable.pnSerial')}</th><th className="p-2 md:p-3 text-left text-sm">{t('partsTable.partName')}</th><th className="p-2 md:p-3 text-left text-sm">{t('partsTable.qty')}</th><th className="p-2 md:p-3 text-left text-sm">{t('partsTable.criticality')}</th><th className="p-2 md:p-3 text-left text-sm">{t('partsTable.type')}</th></tr></thead>
+  2434→                  <tbody>
+  2435→                    {categories.flatMap(cat => cat.photos.filter(p => photoShouldBeInPartsTable(p, cat.additionalParts)).map(photo => ({ photo, categoryId: cat.id, catAddParts: cat.additionalParts }))).map(({ photo, categoryId, catAddParts }) => (
+  2436→                      <React.Fragment key={photo.id}>
+  2437→                        <tr className="border-b hover:bg-orange-50">
+  2438→                          <td className="p-2 md:p-3 font-semibold text-sm">{getDisplayPn(photo, catAddParts)}{photo.serialNumber && <span className="text-gray-500 font-normal ml-1">({photo.serialNumber})</span>}</td>
+  2439→                          <td className="p-2 md:p-3 text-sm">{photo.partName || '-'}</td>
+  2440→                          <td className="p-2 md:p-3 text-sm">{photo.quantity || '-'}</td>
+  2441→                          <td className="p-2 md:p-3">
+  2442→                            {photo.criticality === 'Alta' && <Badge className="bg-red-500 text-white text-xs">Alta</Badge>}
+  2443→                            {photo.criticality === 'Média' && <Badge className="bg-yellow-500 text-white text-xs">Média</Badge>}
+  2444→                            {photo.criticality === 'Baixa' && <Badge className="bg-green-500 text-white text-xs">Baixa</Badge>}
+  2445→                            {!photo.criticality && '-'}
+  2446→                          </td>
+  2447→                          <td className="p-2 md:p-3"><Badge variant="outline" className="text-xs">{t('partsTable.main')}</Badge></td>
+  2448→                        </tr>
+  2449→                        {getSubPartsForPhoto(photo, catAddParts).map((subPart) => (
+  2450→                          <tr key={subPart.id} className="border-b bg-orange-50/50 hover:bg-orange-100/50">
+  2451→                            <td className="p-2 md:p-3 pl-6 text-orange-700 text-sm"><span className="mr-1">└─</span>{subPart.pn}{subPart.serialNumber && <span className="text-gray-500 ml-1">({subPart.serialNumber})</span>}</td>
+  2452→                            <td className="p-2 md:p-3 text-gray-600 italic text-sm">{subPart.partName}</td>
+  2453→                            <td className="p-2 md:p-3 text-sm">{subPart.quantity}</td>
+  2454→                            <td className="p-2 md:p-3">
+  2455→                              {subPart.criticality === 'Alta' && <Badge className="bg-red-500 text-white text-xs">Alta</Badge>}
+  2456→                              {subPart.criticality === 'Média' && <Badge className="bg-yellow-500 text-white text-xs">Média</Badge>}
+  2457→                              {subPart.criticality === 'Baixa' && <Badge className="bg-green-500 text-white text-xs">Baixa</Badge>}
+  2458→                              {!subPart.criticality && '-'}
+  2459→                            </td>
+  2460→                            <td className="p-2 md:p-3"><Badge variant="secondary" className="text-xs bg-orange-100 text-orange-700">{t('partsTable.subpart')}</Badge></td>
+  2461→                          </tr>
+  2462→                        ))}
+  2463→                      </React.Fragment>
+  2464→                    ))}
+  2465→                  </tbody>
+  2466→                </table>
+  2467→              </div>
+  2468→            </CardContent>
+  2469→          </Card>
+  2470→
+  2471→          {/* Conclusion */}
+  2472→          <Card className="mt-8">
+  2473→            <CardHeader><CardTitle className="flex items-center gap-2"><Check className="h-5 w-5 text-orange-500" />{t('conclusion.title')}</CardTitle></CardHeader>
+  2474→            <CardContent>
+  2475→              <Textarea
+  2476→                className="min-h-32"
+  2477→                placeholder={t('conclusion.placeholder')}
+  2478→                value={conclusion}
+  2479→                onChange={(e) => setConclusion(e.target.value)}
+  2480→              />
+  2481→            </CardContent>
+  2482→          </Card>
+  2483→
+  2484→          {/* Botão Limpar */}
+  2485→          <div className="mt-4">
+  2486→            <Button
+  2487→              variant="outline"
+  2488→              className="w-full h-12 border-red-500 text-red-500 hover:bg-red-50"
+  2489→              onClick={() => setShowClearConfirm(true)}
+  2490→            >
+  2491→              <Trash2 className="h-5 w-5 mr-2" />
+  2492→              {t('action.clear')}
+  2493→            </Button>
+  2494→          </div>
+  2495→        </div>
+  2496→      </section>
+  2497→
+  2498→      {/* Photo Options Dialog - Home */}
+  2499→      {showPhotoOptions && (
+  2500→        <PhotoOptionsDialog
+  2501→          open={!!showPhotoOptions}
+  2502→          onOpenChange={(open) => !open && setShowPhotoOptions(null)}
+  2503→          hasImage={!!categories.find(c => c.id === showPhotoOptions?.categoryId)?.photos.find(p => p.id === showPhotoOptions?.photoId)?.imageData}
+  2504→          onUpload={(file) => {
+  2505→            if (showPhotoOptions) {
+  2506→              handlePhotoUpload(showPhotoOptions.categoryId, showPhotoOptions.photoId, file);
+  2507→            }
+  2508→          }}
+  2509→          onCamera={() => {
+  2510→            if (showPhotoOptions) {
+  2511→              setCameraTarget(showPhotoOptions);
+  2512→              openCamera();
+  2513→            }
+  2514→          }}
+  2515→          onPaste={() => {
+  2516→            if (showPhotoOptions) {
+  2517→              handlePaste(showPhotoOptions.categoryId, showPhotoOptions.photoId);
+  2518→            }
+  2519→          }}
+  2520→          onViewFullscreen={() => {
+  2521→            if (showPhotoOptions) {
+  2522→              const photo = categories.find(c => c.id === showPhotoOptions.categoryId)?.photos.find(p => p.id === showPhotoOptions.photoId);
+  2523→              if (photo?.imageData) {
+  2524→                setFullscreenImage(photo.editedImageData || photo.imageData);
+  2525→              }
+  2526→            }
+  2527→          }}
+  2528→          t={t}
+  2529→        />
+  2530→      )}
+  2531→
+  2532→      {/* Fullscreen Viewer - Home */}
+  2533→      {fullscreenImage && (
+  2534→        <FullScreenImageViewer
+  2535→          imageData={fullscreenImage}
+  2536→          onClose={() => setFullscreenImage(null)}
+  2537→          t={t}
+  2538→        />
+  2539→      )}
+  2540→
+  2541→      {/* Camera Dialog - Home */}
+  2542→      {showCamera && cameraStream && (
+  2543→        <div className="fixed inset-0 bg-black z-[100] flex flex-col">
+  2544→          <div className="flex justify-between items-center p-3 md:p-4 bg-black/50">
+  2545→            <span className="text-white font-semibold text-sm md:text-base">{t('photoOptions.openCamera')}</span>
+  2546→            <Button variant="ghost" size="icon" className="text-white h-10 w-10" onClick={closeCamera}>
+  2547→              <X className="h-6 w-6" />
+  2548→            </Button>
+  2549→          </div>
+  2550→          <div className="flex-1 relative">
+  2551→            <video
+  2552→              id="camera-video-home"
+  2553→              autoPlay
+  2554→              playsInline
+  2555→              muted
+  2556→              className="w-full h-full object-cover"
+  2557→              ref={(video) => {
+  2558→                if (video && cameraStream) {
+  2559→                  video.srcObject = cameraStream;
+  2560→                }
+  2561→              }}
+  2562→            />
+  2563→            {/* Botão de capturar sobre o vídeo */}
+  2564→            <div className="absolute bottom-24 left-1/2 -translate-x-1/2">
+  2565→              <Button 
+  2566→                size="lg"
+  2567→                className="rounded-full h-16 w-16 md:h-14 md:w-14 bg-white text-black hover:bg-gray-200 shadow-lg"
+  2568→                onClick={capturePhoto}
+  2569→              >
+  2570→                <Camera className="h-8 w-8 md:h-7 md:w-7" />
+  2571→              </Button>
+  2572→            </div>
+  2573→          </div>
+  2574→        </div>
+  2575→      )}
+  2576→
+  2577→      {/* Translate Dialog - HomeContent */}
+  2578→      <Dialog open={showTranslateDialog} onOpenChange={setShowTranslateDialog}>
+  2579→        <DialogContent className="max-w-[90vw] md:max-w-md">
+  2580→          <DialogHeader>
+  2581→            <DialogTitle className="text-lg flex items-center gap-2">
+  2582→              <Globe className="h-5 w-5 text-cyan-500" />
+  2583→              {t('action.translate')}
+  2584→            </DialogTitle>
+  2585→            <DialogDescription>Traduzir todos os textos do relatório</DialogDescription>
+  2586→          </DialogHeader>
+  2587→          
+  2588→          {isTranslating ? (
+  2589→            <div className="py-8 space-y-4 text-center">
+  2590→              <div className="relative w-24 h-24 mx-auto">
+  2591→                <div className="absolute inset-0 rounded-full border-4 border-cyan-200"></div>
+  2592→                <div className="absolute inset-0 rounded-full border-4 border-cyan-500 border-t-transparent animate-spin"></div>
+  2593→                <div className="absolute inset-0 flex items-center justify-center">
+  2594→                  <span className="text-lg font-bold text-cyan-600">
+  2595→                    {translateProgress.total > 0 ? Math.round((translateProgress.current / translateProgress.total) * 100) : 0}%
+  2596→                  </span>
+  2597→                </div>
+  2598→              </div>
+  2599→              <div className="space-y-2">
+  2600→                <p className="font-medium text-gray-700">{translateProgress.status}</p>
+  2601→                {translateProgress.total > 0 && (
+  2602→                  <p className="text-sm text-gray-500">
+  2603→                    {translateProgress.current} / {translateProgress.total} textos
+  2604→                  </p>
+  2605→                )}
+  2606→              </div>
+  2607→              <div className="w-full bg-gray-200 rounded-full h-2">
+  2608→                <div 
+  2609→                  className="bg-cyan-500 h-2 rounded-full transition-all duration-300"
+  2610→                  style={{ width: `${translateProgress.total > 0 ? (translateProgress.current / translateProgress.total) * 100 : 0}%` }}
+  2611→                />
+  2612→              </div>
+  2613→            </div>
+  2614→          ) : (
+  2615→            <div className="space-y-3 pt-4">
+  2616→              <p className="text-sm text-gray-600 mb-4">Selecione o idioma de destino:</p>
+  2617→              <div className="grid grid-cols-2 gap-2">
+  2618→                {(['pt', 'en', 'ja', 'zh'] as Language[]).map((lang) => (
+  2619→                  <Button
+  2620→                    key={lang}
+  2621→                    variant="outline"
+  2622→                    className="h-16 flex flex-col items-center justify-center gap-1"
+  2623→                    onClick={() => handleTranslateAllHome(lang)}
+  2624→                  >
+  2625→                    <span className="text-2xl">{LANGUAGE_FLAGS[lang]}</span>
+  2626→                    <span className="text-xs font-medium">{LANGUAGE_NAMES[lang]}</span>
+  2627→                  </Button>
+  2628→                ))}
+  2629→              </div>
+  2630→            </div>
+  2631→          )}
+  2632→          
+  2633→          {!isTranslating && (
+  2634→            <DialogFooter>
+  2635→              <Button variant="outline" onClick={() => setShowTranslateDialog(false)}>
+  2636→                {t('action.cancel')}
+  2637→              </Button>
+  2638→            </DialogFooter>
+  2639→          )}
+  2640→        </DialogContent>
+  2641→      </Dialog>
+  2642→
+  2643→      {/* Clear Confirm Dialog */}
+  2644→      <Dialog open={showClearConfirm} onOpenChange={setShowClearConfirm}>
+  2645→        <DialogContent className="max-w-[90vw] md:max-w-lg">
+  2646→          <DialogHeader><DialogTitle>{t('clearConfirm.title')}</DialogTitle><DialogDescription>{t('clearConfirm.description')}</DialogDescription></DialogHeader>
+  2647→          <DialogFooter className="flex-col sm:flex-row gap-2">
+  2648→            <Button variant="outline" onClick={() => setShowClearConfirm(false)} className="w-full sm:w-auto h-11">{t('action.cancel')}</Button>
+  2649→            <Button variant="destructive" onClick={handleClearReport} className="w-full sm:w-auto h-11">{t('action.clear')}</Button>
+  2650→          </DialogFooter>
+  2651→        </DialogContent>
+  2652→      </Dialog>
+  2653→
+  2654→      {/* Move Photo Dialog */}
+  2655→      <Dialog open={!!showMovePhotoDialog} onOpenChange={(open) => { if (!open) setShowMovePhotoDialog(null); }}>
+  2656→        <DialogContent className="max-w-[90vw] md:max-w-md">
+  2657→          <DialogHeader>
+  2658→            <DialogTitle className="flex items-center gap-2">
+  2659→              <ArrowUpRight className="h-5 w-5 text-blue-500" />
+  2660→              Mover Foto
+  2661→            </DialogTitle>
+  2662→            <DialogDescription>
+  2663→              {showMovePhotoDialog && `Mover foto ${showMovePhotoDialog.currentIndex + 1} para outra posição dentro da categoria`}
+  2664→            </DialogDescription>
+  2665→          </DialogHeader>
+  2666→          
+  2667→          <div className="space-y-4 pt-4">
+  2668→            <div className="space-y-2">
+  2669→              <Label>Posição de destino:</Label>
+  2670→              <Select value={String(movePhotoToIndex)} onValueChange={(v) => setMovePhotoToIndex(Number(v))}>
+  2671→                <SelectTrigger>
+  2672→                  <SelectValue />
+  2673→                </SelectTrigger>
+  2674→                <SelectContent>
+  2675→                  {showMovePhotoDialog && categories.find(c => c.id === showMovePhotoDialog.categoryId)?.photos.map((_, idx) => (
+  2676→                    <SelectItem key={idx} value={String(idx)}>
+  2677→                      Posição {idx + 1} {idx === showMovePhotoDialog.currentIndex ? '(atual)' : ''}
+  2678→                    </SelectItem>
+  2679→                  ))}
+  2680→                </SelectContent>
+  2681→              </Select>
+  2682→            </div>
+  2683→            
+  2684→            <div className="flex gap-2">
+  2685→              <Button variant="outline" className="flex-1" onClick={() => setShowMovePhotoDialog(null)}>
+  2686→                {t('action.cancel')}
+  2687→              </Button>
+  2688→              <Button 
+  2689→                className="flex-1 bg-blue-500 hover:bg-blue-600" 
+  2690→                onClick={() => {
+  2691→                  if (showMovePhotoDialog) {
+  2692→                    movePhotoInCategory(showMovePhotoDialog.categoryId, showMovePhotoDialog.currentIndex, movePhotoToIndex);
+  2693→                    setShowMovePhotoDialog(null);
+  2694→                  }
+  2695→                }}
+  2696→                disabled={showMovePhotoDialog && movePhotoToIndex === showMovePhotoDialog.currentIndex}
+  2697→              >
+  2698→                Mover
+  2699→              </Button>
+  2700→            </div>
+  2701→          </div>
+  2702→        </DialogContent>
+  2703→      </Dialog>
+  2704→
+  2705→      {/* Photo Editor */}
+  2706→      {editingPhoto && (
+  2707→        <PhotoEditor photo={editingPhoto.photo} editMode={editingPhoto.editMode} onSave={(data) => { updatePhotoInCategory(editingPhoto.categoryId, editingPhoto.photo.id, data); setEditingPhoto(null); }} onClose={() => setEditingPhoto(null)} t={t} />
+  2708→      )}
+  2709→
+  2710→      {/* Loading Overlay */}
+  2711→      {isLoading && (
+  2712→        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+  2713→          <Card className="w-64"><CardContent className="p-6 text-center"><div className="animate-spin rounded-full h-12 w-12 border-b-2 border-orange-500 mx-auto mb-4"></div><p className="text-sm text-gray-600">{t('loading.generatingPPT')}</p></CardContent></Card>
+  2714→        </div>
+  2715→      )}
+  2716→    </>
+  2717→  );
+  2718→}
+  2719→
+  2720→// ============================================
+  2721→// ABA INSPEÇÃO - Sem Categorias (formato original)
+  2722→// ============================================
+  2723→function InspecaoContent({ reportId, onRegenerateId }: { reportId: string; onRegenerateId: () => void }) {
+  2724→  const {
+  2725→    inspection,
+  2726→    photos,
+  2727→    additionalParts,
+  2728→    conclusion,
+  2729→    updateInspection,
+  2730→    setPhotos,
+  2731→    addPhoto,
+  2732→    removePhoto,
+  2733→    updatePhoto,
+  2734→    movePhoto,
+  2735→    addAdditionalPart,
+  2736→    removeAdditionalPart,
+  2737→    setAdditionalParts,
+  2738→    updateAdditionalPartsParentPn,
+  2739→    setConclusion,
+  2740→    clearAll,
+  2741→  } = useReportStore();
+  2742→  
+  2743→  const { language, t } = useTranslation();
+  2744→
+  2745→  const [showPhotoOptions, setShowPhotoOptions] = useState<string | null>(null);
+  2746→  const [showAdditionalParts, setShowAdditionalParts] = usePersistedState<Record<string, boolean>>('insp-subparts-open', {});
+  2747→  const [showClearConfirm, setShowClearConfirm] = useState(false);
+  2748→  const [isLoading, setIsLoading] = useState(false);
+  2749→  const [editingPhoto, setEditingPhoto] = useState<{ photo: PhotoData; editMode: 'primary' | 'secondary' | 'dual' } | null>(null);
+  2750→  const [showEmailDialog, setShowEmailDialog] = useState(false);
+  2751→  const [fullscreenImage, setFullscreenImage] = useState<string | null>(null);
+  2752→  const [cameraStream, setCameraStream] = useState<MediaStream | null>(null);
+  2753→  const [showCamera, setShowCamera] = useState(false);
+  2754→  const [cameraTargetId, setCameraTargetId] = useState<string | null>(null);
+  2755→  const [showExportDialog, setShowExportDialog] = useState(false);
+  2756→  const [showDataDialog, setShowDataDialog] = useState(false);
+  2757→  const [isTranslating, setIsTranslating] = useState(false);
+  2758→  const [showTranslateDialog, setShowTranslateDialog] = useState(false);
+  2759→  const [translateProgress, setTranslateProgress] = useState({ current: 0, total: 0, status: '' });
+  2760→  const [showMovePhotoDialog, setShowMovePhotoDialog] = useState(false);
+  2761→  const [movePhotoFromIndex, setMovePhotoFromIndex] = useState<number | null>(null);
+  2762→  const [movePhotoToIndex, setMovePhotoToIndex] = useState(1);
+  2763→
+  2764→  const fileInputRef = useRef<HTMLInputElement>(null);
+  2765→  const fileImportRef = useRef<HTMLInputElement>(null);
+  2766→  const handleTagChange = (tag: string) => {
+  2767→    updateInspection({ tag });
+  2768→    if (tag && MACHINE_DATA[tag]) {
+  2769→      const machine = MACHINE_DATA[tag];
+  2770→      updateInspection({ modelo: machine.modelo, sn: machine.sn, entrega: machine.entrega, cliente: machine.cliente });
+  2771→    }
+  2772→  };
+  2773→
+  2774→  const handlePhotoUpload = (photoId: string, file: File) => {
+  2775→    const reader = new FileReader();
+  2776→    reader.onload = (e) => { updatePhoto(photoId, { imageData: e.target?.result as string, editedImageData: null }); };
+  2777→    reader.readAsDataURL(file);
+  2778→    setShowPhotoOptions(null);
+  2779→  };
+  2780→
+  2781→  const handlePaste = useCallback(async (photoId: string) => {
+  2782→    try {
+  2783→      const clipboardItems = await navigator.clipboard.read();
+  2784→      for (const item of clipboardItems) { for (const type of item.types) { if (type.startsWith('image/')) { const blob = await item.getType(type); const reader = new FileReader(); reader.onload = (e) => { updatePhoto(photoId, { imageData: e.target?.result as string, editedImageData: null }); }; reader.readAsDataURL(blob); } } }
+  2785→    } catch (err) { console.error('Failed to paste:', err); }
+  2786→    setShowPhotoOptions(null);
+  2787→  }, [updatePhoto]);
+  2788→
+  2789→  // Camera functions for InspecaoContent
+  2790→  const openCameraInsp = async () => {
+  2791→    try {
+  2792→      const stream = await navigator.mediaDevices.getUserMedia({ 
+  2793→        video: { facingMode: 'environment' } 
+  2794→      });
+  2795→      setCameraStream(stream);
+  2796→      setShowCamera(true);
+  2797→    } catch (err) {
+  2798→      console.error('Erro ao abrir câmera:', err);
+  2799→      alert('Não foi possível acessar a câmera. Verifique as permissões.');
+  2800→    }
+  2801→  };
+  2802→
+  2803→  const closeCameraInsp = () => {
+  2804→    if (cameraStream) {
+  2805→      cameraStream.getTracks().forEach(track => track.stop());
+  2806→      setCameraStream(null);
+  2807→    }
+  2808→    setShowCamera(false);
+  2809→    setCameraTargetId(null);
+  2810→  };
+  2811→
+  2812→  const capturePhotoInsp = () => {
+  2813→    const video = document.getElementById('camera-video-insp') as HTMLVideoElement;
+  2814→    if (!video || !cameraTargetId) return;
+  2815→    
+  2816→    const canvas = document.createElement('canvas');
+  2817→    canvas.width = video.videoWidth;
+  2818→    canvas.height = video.videoHeight;
+  2819→    const ctx = canvas.getContext('2d');
+  2820→    if (ctx) {
+  2821→      ctx.drawImage(video, 0, 0);
+  2822→      const imageData = canvas.toDataURL('image/png');
+  2823→      updatePhoto(cameraTargetId, { imageData, editedImageData: null });
+  2824→    }
+  2825→    
+  2826→    closeCameraInsp();
+  2827→    setShowPhotoOptions(null);
+  2828→  };
+  2829→
+  2830→  // Ctrl+V listener removido - colar foto apenas pelo botão "Colar da área de transferência"
+  2831→
+  2832→  const handleClearReport = () => { clearAll(); setShowClearConfirm(false); onRegenerateId(); };
+  2833→
+  2834→  const handleExport = () => {
+  2835→    // Export ALL data including photos (base64), inspection, photos, additionalParts, conclusion
+  2836→    const data = { 
+  2837→      version: '1.0',
+  2838→      exportDate: new Date().toISOString(),
+  2839→      inspection, 
+  2840→      photos, 
+  2841→      additionalParts, 
+  2842→      conclusion 
+  2843→    };
+  2844→    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+  2845→    const url = URL.createObjectURL(blob);
+  2846→    const a = document.createElement('a');
+  2847→    a.href = url;
+  2848→    a.download = `Inspecao_${sanitizeForFilename(inspection.descricao || inspection.tag)}_${reportId}_${new Date().toISOString().split('T')[0]}.json`;
+  2849→    a.click();
+  2850→    URL.revokeObjectURL(url);
+  2851→  };
+  2852→
+  2853→  const handleImport = (e: React.ChangeEvent<HTMLInputElement>) => {
+  2854→    const file = e.target.files?.[0];
+  2855→    if (!file) return;
+  2856→    // Check if there's existing data that might conflict
+  2857→    const hasExistingData = inspection.tag || inspection.cliente || photos.some(p => 
+  2858→      p.imageData || p.pn || p.description || p.partName
+  2859→    ) || additionalParts.length > 0 || conclusion;
+  2860→    if (hasExistingData) {
+  2861→      if (!confirm('Já existe um relatório em andamento. Deseja substituí-lo pelo arquivo importado? Os dados atuais serão perdidos.')) {
+  2862→        e.target.value = '';
+  2863→        return;
+  2864→      }
+  2865→      // Clear existing data before importing to prevent conflicts
+  2866→      clearAll();
+  2867→    }
+  2868→    const reader = new FileReader();
+  2869→    reader.onload = (event) => {
+  2870→      try {
+  2871→        const data = JSON.parse(event.target?.result as string);
+  2872→        // Import inspection data
+  2873→        if (data.inspection) {
+  2874→          Object.keys(data.inspection).forEach(key => {
+  2875→            updateInspection({ [key]: data.inspection[key] });
+  2876→          });
+  2877→        }
+  2878→        // Import photos with all data including imageData
+  2879→        if (data.photos && Array.isArray(data.photos)) {
+  2880→          // Fix sub-part associations: set photoId on sub-parts
+  2881→          if (data.additionalParts && Array.isArray(data.additionalParts)) {
+  2882→            const importedPhotos = data.photos || [];
+  2883→            data.additionalParts.forEach((ap: any) => {
+  2884→              if (ap.parentPn) {
+  2885→                const match = importedPhotos.find((p: any) => p.pn === ap.parentPn);
+  2886→                if (match) ap.photoId = match.id;
+  2887→              }
+  2888→            });
+  2889→          }
+  2890→          setPhotos(data.photos);
+  2891→        }
+  2892→        // Import additional parts
+  2893→        if (data.additionalParts && Array.isArray(data.additionalParts)) {
+  2894→          setAdditionalParts(data.additionalParts);
+  2895→          // Auto-expand sub-parts sections for photos that have them
+  2896→          const importedPhotos = data.photos || photos;
+  2897→          const expandMap: Record<string, boolean> = {};
+  2898→          importedPhotos.forEach((photo: any) => {
+  2899→            const hasSub = photoHasSubPartData(photo, data.additionalParts);
+  2900→            if (hasSub) expandMap[photo.id] = true;
+  2901→          });
+  2902→          if (Object.keys(expandMap).length > 0) {
+  2903→            setShowAdditionalParts(prev => ({ ...prev, ...expandMap }));
+  2904→          }
+  2905→        }
+  2906→        // Import conclusion
+  2907→        if (data.conclusion !== undefined) setConclusion(data.conclusion);
+  2908→      } catch (err) { 
+  2909→        console.error('Failed to import:', err);
+  2910→        alert('Erro ao importar arquivo. Verifique se o arquivo é válido.');
+  2911→      }
+  2912→      // Reset input to allow re-importing same file
+  2913→      e.target.value = '';
+  2914→    };
+  2915→    reader.onerror = () => {
+  2916→      alert('Erro ao ler o arquivo.');
+  2917→      e.target.value = '';
+  2918→    };
+  2919→    reader.readAsText(file);
+  2920→  };
+  2921→
+  2922→  // Função para traduzir todos os textos dinâmicos
+  2923→  const handleTranslateAll = async (targetLang: Language) => {
+  2924→    setShowTranslateDialog(true);
+  2925→    setIsTranslating(true);
+  2926→    
+  2927→    try {
+  2928→      // Coletar todos os textos para traduzir
+  2929→      const textItems: { id: string; text: string; type: string }[] = [];
+  2930→      
+  2931→      // Textos da inspeção
+  2932→      if (inspection.descricao?.trim()) {
+  2933→        textItems.push({ id: 'inspection.descricao', text: inspection.descricao, type: 'inspection' });
+  2934→      }
+  2935→      if (inspection.osExecucao?.trim()) {
+  2936→        textItems.push({ id: 'inspection.osExecucao', text: inspection.osExecucao, type: 'inspection' });
+  2937→      }
+  2938→      if (inspection.inspetor?.trim()) {
+  2939→        textItems.push({ id: 'inspection.inspetor', text: inspection.inspetor, type: 'inspection' });
+  2940→      }
+  2941→      if (inspection.cliente?.trim()) {
+  2942→        textItems.push({ id: 'inspection.cliente', text: inspection.cliente, type: 'inspection' });
+  2943→      }
+  2944→      
+  2945→      // Textos das fotos
+  2946→      photos.forEach((photo, idx) => {
+  2947→        if (photo.description?.trim()) {
+  2948→          textItems.push({ id: `photo.${photo.id}.description`, text: photo.description, type: 'photo' });
+  2949→        }
+  2950→        if (photo.partName?.trim()) {
+  2951→          textItems.push({ id: `photo.${photo.id}.partName`, text: photo.partName, type: 'photo' });
+  2952→        }
+  2953→      });
+  2954→      
+  2955→      // Textos das peças adicionais
+  2956→      additionalParts.forEach((part) => {
+  2957→        if (part.partName?.trim()) {
+  2958→          textItems.push({ id: `part.${part.id}.partName`, text: part.partName, type: 'part' });
+  2959→        }
+  2960→      });
+  2961→      
+  2962→      // Conclusão
+  2963→      if (conclusion?.trim()) {
+  2964→        textItems.push({ id: 'conclusion', text: conclusion, type: 'conclusion' });
+  2965→      }
+  2966→      
+  2967→      const total = textItems.length;
+  2968→      setTranslateProgress({ current: 0, total, status: `Encontrados ${total} textos para traduzir` });
+  2969→      
+  2970→      if (total === 0) {
+  2971→        alert('Nenhum texto encontrado para traduzir!');
+  2972→        setShowTranslateDialog(false);
+  2973→        setIsTranslating(false);
+  2974→        return;
+  2975→      }
+  2976→      
+  2977→      // Enviar todos os textos para tradução
+  2978→      setTranslateProgress({ current: 0, total, status: 'Enviando para API de tradução...' });
+  2979→      
+  2980→      const response = await fetch('/api/translate-content', {
+  2981→        method: 'POST',
+  2982→        headers: { 'Content-Type': 'application/json' },
+  2983→        body: JSON.stringify({
+  2984→          texts: textItems.map(item => item.text),
+  2985→          targetLanguage: targetLang,
+  2986→        }),
+  2987→      });
+  2988→      
+  2989→      if (!response.ok) {
+  2990→        const errorData = await response.json().catch(() => ({}));
+  2991→        throw new Error(errorData.message || `Erro na API: ${response.status}`);
+  2992→      }
+  2993→      
+  2994→      const data = await response.json();
+  2995→      const translations: string[] = data.translations || [];
+  2996→      
+  2997→      setTranslateProgress({ current: total, total, status: 'Aplicando traduções...' });
+  2998→      
+  2999→      // Aplicar traduções de volta
+  3000→      for (let i = 0; i < textItems.length; i++) {
+  3001→        const item = textItems[i];
+  3002→        const translation = translations[i] || item.text;
+  3003→        
+  3004→        if (item.id === 'inspection.descricao') {
+  3005→          updateInspection({ descricao: translation });
+  3006→        } else if (item.id === 'inspection.osExecucao') {
+  3007→          updateInspection({ osExecucao: translation });
+  3008→        } else if (item.id === 'inspection.inspetor') {
+  3009→          updateInspection({ inspetor: translation });
+  3010→        } else if (item.id === 'inspection.cliente') {
+  3011→          updateInspection({ cliente: translation });
+  3012→        } else if (item.id === 'conclusion') {
+  3013→          setConclusion(translation);
+  3014→        } else if (item.id.startsWith('photo.')) {
+  3015→          const [, photoId, field] = item.id.split('.');
+  3016→          if (field === 'description') {
+  3017→            updatePhoto(photoId, { description: translation });
+  3018→          } else if (field === 'partName') {
+  3019→            updatePhoto(photoId, { partName: translation });
+  3020→          }
+  3021→        } else if (item.id.startsWith('part.')) {
+  3022→          const [, partId] = item.id.split('.');
+  3023→          const partIndex = additionalParts.findIndex(p => p.id === partId);
+  3024→          if (partIndex !== -1) {
+  3025→            const updatedParts = [...additionalParts];
+  3026→            updatedParts[partIndex] = { ...updatedParts[partIndex], partName: translation };
+  3027→            setAdditionalParts(updatedParts);
+  3028→          }
+  3029→        }
+  3030→      }
+  3031→      
+  3032→      setTranslateProgress({ current: total, total, status: 'Tradução concluída!' });
+  3033→      
+  3034→      setTimeout(() => {
+  3035→        setShowTranslateDialog(false);
+  3036→        alert(`✅ Tradução concluída!\n\n${total} textos traduzidos para ${LANGUAGE_NAMES[targetLang]}`);
+  3037→      }, 500);
+  3038→      
+  3039→    } catch (error) {
+  3040→      console.error('Erro ao traduzir:', error);
+  3041→      alert('Erro ao traduzir o conteúdo: ' + (error instanceof Error ? error.message : 'Erro desconhecido'));
+  3042→      setShowTranslateDialog(false);
+  3043→    }
+  3044→    setIsTranslating(false);
+  3045→  };
+  3046→
+  3047→  // Função para abrir o diálogo de tradução
+  3048→  const handleTranslateContent = () => {
+  3049→    setShowTranslateDialog(true);
+  3050→  };
+  3051→
+  3052→  // Função para mover foto para posição específica
+  3053→  const handleMovePhotoToPosition = () => {
+  3054→    if (movePhotoFromIndex === null) return;
+  3055→    if (movePhotoFromIndex === movePhotoToIndex) {
+  3056→      setShowMovePhotoDialog(false);
+  3057→      setMovePhotoFromIndex(null);
+  3058→      return;
+  3059→    }
+  3060→    
+  3061→    movePhoto(movePhotoFromIndex, movePhotoToIndex);
+  3062→    setShowMovePhotoDialog(false);
+  3063→    setMovePhotoFromIndex(null);
+  3064→  };
+  3065→
+  3066→  const handleGeneratePPT = async () => {
+  3067→    setIsLoading(true);
+  3068→    try {
+  3069→      // Translate dynamic texts if not in Portuguese
+  3070→      if (language !== 'pt') {
+  3071→        const { translateDynamic } = useTranslationStore.getState();
+  3072→        
+  3073→        // Translate all inspection text fields
+  3074→        const translatedInspection = { ...inspection };
+  3075→        if (inspection.descricao) {
+  3076→          translatedInspection.descricao = await translateDynamic(inspection.descricao);
+  3077→        }
+  3078→        if (inspection.osExecucao) {
+  3079→          translatedInspection.osExecucao = await translateDynamic(inspection.osExecucao);
+  3080→        }
+  3081→        if (inspection.inspetor) {
+  3082→          translatedInspection.inspetor = await translateDynamic(inspection.inspetor);
+  3083→        }
+  3084→        if (inspection.cliente) {
+  3085→          translatedInspection.cliente = await translateDynamic(inspection.cliente);
+  3086→        }
+  3087→        
+  3088→        // Translate all photos
+  3089→        const translatedPhotos = await Promise.all(photos.map(async (photo) => {
+  3090→          const translatedPhoto = { ...photo };
+  3091→          if (photo.description) {
+  3092→            translatedPhoto.description = await translateDynamic(photo.description);
+  3093→          }
+  3094→          if (photo.partName) {
+  3095→            translatedPhoto.partName = await translateDynamic(photo.partName);
+  3096→          }
+  3097→          return translatedPhoto;
+  3098→        }));
+  3099→        
+  3100→        // Translate additional parts
+  3101→        const translatedAdditionalParts = await Promise.all(additionalParts.map(async (part) => {
+  3102→          const translatedPart = { ...part };
+  3103→          if (part.partName) {
+  3104→            translatedPart.partName = await translateDynamic(part.partName);
+  3105→          }
+  3106→          return translatedPart;
+  3107→        }));
+  3108→        
+  3109→        // Translate conclusion
+  3110→        const translatedConclusion = conclusion ? await translateDynamic(conclusion) : conclusion;
+  3111→        
+  3112→        await generatePowerPoint({ 
+  3113→          inspection: translatedInspection, 
+  3114→          photos: translatedPhotos, 
+  3115→          additionalParts: translatedAdditionalParts, 
+  3116→          conclusion: translatedConclusion,
+  3117→          language,
+  3118→          reportId
+  3119→        });
+  3120→        // Auto-download Excel parts table
+  3121→        exportPartsTableToExcelInspecao(translatedInspection, translatedPhotos, translatedAdditionalParts, reportId);
+  3122→      } else {
+  3123→        await generatePowerPoint({ inspection, photos, additionalParts, conclusion, language: 'pt', reportId });
+  3124→        // Auto-download Excel parts table
+  3125→        exportPartsTableToExcelInspecao(inspection, photos, additionalParts, reportId);
+  3126→      }
+  3127→    } catch (error) { 
+  3128→      console.error('Error generating PowerPoint:', error); 
+  3129→    }
+  3130→    setIsLoading(false);
+  3131→  };
+  3132→
+  3133→  // Email handlers
+  3134→  const handleSendAnalysisEmail = () => {
+  3135→    const subject = generateEmailSubject(inspection, 'analysis', reportId);
+  3136→    const body = generateAnalysisEmailBody(inspection, photos, additionalParts, undefined, reportId);
+  3137→    openEmailClient({
+  3138→      to: EMAIL_CONFIG.analysisRecipients,
+  3139→      cc: EMAIL_CONFIG.analysisCc,
+  3140→      subject,
+  3141→      body,
+  3142→    });
+  3143→    setShowEmailDialog(false);
+  3144→  };
+  3145→
+  3146→  const handleSendConclusionEmail = () => {
+  3147→    const subject = generateEmailSubject(inspection, 'conclusion', reportId);
+  3148→    const body = generateConclusionEmailBody(inspection, conclusion, photos, additionalParts, undefined, reportId);
+  3149→    openEmailClient({
+  3150→      to: EMAIL_CONFIG.conclusionRecipients,
+  3151→      cc: EMAIL_CONFIG.conclusionCc,
+  3152→      subject,
+  3153→      body,
+  3154→    });
+  3155→    setShowEmailDialog(false);
+  3156→  };
+  3157→
+  3158→  return (
+  3159→    <>
+  3160→      {/* Action Buttons - Responsivo */}
+  3161→      <div className="fixed top-20 right-4 md:flex flex-col gap-2 z-40 hidden">
+  3162→        <Button size="icon" className="rounded-full bg-green-600 hover:bg-green-700" onClick={() => addPhoto()} title={t('action.addPhoto')}><Plus className="h-5 w-5" /></Button>
+  3163→        <Button size="icon" className="rounded-full bg-red-600 hover:bg-red-700" onClick={() => setShowClearConfirm(true)} title={t('action.clear')}><Trash2 className="h-5 w-5" /></Button>
+  3164→        
+  3165→        {/* Botão de Traduzir */}
+  3166→        <Button 
+  3167→          size="icon" 
+  3168→          className={`rounded-full ${language === 'pt' ? 'bg-gray-400' : 'bg-cyan-600 hover:bg-cyan-700'}`} 
+  3169→          onClick={handleTranslateContent} 
+  3170→          disabled={isTranslating}
+  3171→          title={language === 'pt' ? 'Conteúdo em Português' : t('action.translate')}
+  3172→        >
+  3173→          {isTranslating ? <Loader2 className="h-5 w-5 animate-spin" /> : <Globe className="h-5 w-5" />}
+  3174→        </Button>
+  3175→        
+  3176→        {/* Botão de Dados (Importar/Exportar JSON) */}
+  3177→        <Button size="icon" className="rounded-full bg-blue-600 hover:bg-blue-700" onClick={() => setShowDataDialog(true)} title={t('action.importExport')}><FileDown className="h-5 w-5" /></Button>
+  3178→        
+  3179→        {/* Botão de Exportar (PDF/RDO) */}
+  3180→        <Button size="icon" className="rounded-full bg-purple-600 hover:bg-purple-700" onClick={() => setShowExportDialog(true)} title={t('action.download')}><Download className="h-5 w-5" /></Button>
+  3181→        
+  3182→        <Button size="icon" className="rounded-full bg-orange-500 hover:bg-orange-600" onClick={() => setShowEmailDialog(true)} title="Enviar Email"><Mail className="h-5 w-5" /></Button>
+  3183→      </div>
+  3184→      
+  3185→      {/* Mobile Action Bar - Botão flutuante */}
+  3186→      <MobileActionMenu
+  3187→        onAddPhoto={() => addPhoto()}
+  3188→        onDataDialog={() => setShowDataDialog(true)}
+  3189→        onExportDialog={() => setShowExportDialog(true)}
+  3190→        onEmailDialog={() => setShowEmailDialog(true)}
+  3191→        onClearConfirm={() => setShowClearConfirm(true)}
+  3192→        reportData={{ inspection, photos, additionalParts, conclusion }}
+  3193→        reportType="inspecao"
+  3194→        t={t}
+  3195→      />
+  3196→      <input ref={fileInputRef} type="file" accept="image/*" multiple onChange={handleImport} className="hidden" />
+  3197→      <input ref={fileImportRef} type="file" accept=".json" onChange={handleImport} className="hidden" />
+  3198→
+  3199→      {/* Export Dialog - PDF/RDO */}
+  3200→      <Dialog open={showExportDialog} onOpenChange={setShowExportDialog}>
+  3201→        <DialogContent className="max-w-[90vw] md:max-w-md">
+  3202→          <DialogHeader>
+  3203→            <DialogTitle className="text-lg flex items-center gap-2">
+  3204→              <Download className="h-5 w-5 text-orange-500" />
+  3205→              {t('action.download')}
+  3206→            </DialogTitle>
+  3207→            <DialogDescription>{t('action.downloadDesc')}</DialogDescription>
+  3208→          </DialogHeader>
+  3209→          <div className="space-y-3 pt-4">
+  3210→            <Button 
+  3211→              className="w-full justify-start h-16 md:h-14 text-left" 
+  3212→              variant="outline"
+  3213→              onClick={() => { handleGeneratePPT(); setShowExportDialog(false); }}
+  3214→              disabled={isLoading}
+  3215→            >
+  3216→              <div className="flex items-center gap-3">
+  3217→                <div className="w-10 h-10 md:w-8 md:h-8 rounded-full bg-purple-100 flex items-center justify-center flex-shrink-0">
+  3218→                  <FileImage className="h-5 w-5 md:h-4 md:w-4 text-purple-600" />
+  3219→                </div>
+  3220→                <div>
+  3221→                  <p className="font-medium">{t('rdo.powerpoint')}</p>
+  3222→                  <p className="text-xs text-gray-500">{t('action.pptDesc')}</p>
+  3223→                </div>
+  3224→              </div>
+  3225→            </Button>
+  3226→            
+  3227→            <Button 
+  3228→              className="w-full justify-start h-16 md:h-14 text-left" 
+  3229→              variant="outline"
+  3230→              onClick={() => { alert('🚧 Relatório RDO está em construção. Em breve estará disponível!'); }}
+  3231→            >
+  3232→              <div className="flex items-center gap-3">
+  3233→                <div className="w-10 h-10 md:w-8 md:h-8 rounded-full bg-gray-100 flex items-center justify-center flex-shrink-0">
+  3234→                  <FileText className="h-5 w-5 md:h-4 md:w-4 text-gray-400" />
+  3235→                </div>
+  3236→                <div className="text-left">
+  3237→                  <p className="font-medium text-gray-400">{t('rdo.executive')} 🚧</p>
+  3238→                  <p className="text-xs text-gray-400">Em construção...</p>
+  3239→                </div>
+  3240→              </div>
+  3241→            </Button>
+  3242→          </div>
+  3243→          <DialogFooter>
+  3244→            <Button variant="outline" onClick={() => setShowExportDialog(false)}>{t('action.cancel')}</Button>
+  3245→          </DialogFooter>
+  3246→        </DialogContent>
+  3247→      </Dialog>
+  3248→
+  3249→      {/* Data Dialog - Import/Export JSON */}
+  3250→      <Dialog open={showDataDialog} onOpenChange={setShowDataDialog}>
+  3251→        <DialogContent className="max-w-[90vw] md:max-w-md">
+  3252→          <DialogHeader>
+  3253→            <DialogTitle className="text-lg flex items-center gap-2">
+  3254→              <FileDown className="h-5 w-5 text-blue-500" />
+  3255→              {t('action.importExport')}
+  3256→            </DialogTitle>
+  3257→            <DialogDescription>{t('action.importExportDesc')}</DialogDescription>
+  3258→          </DialogHeader>
+  3259→          <div className="space-y-3 pt-4">
+  3260→            <Button 
+  3261→              className="w-full justify-start h-16 md:h-14 text-left" 
+  3262→              variant="outline"
+  3263→              onClick={() => { handleExport(); setShowDataDialog(false); }}
+  3264→            >
+  3265→              <div className="flex items-center gap-3">
+  3266→                <div className="w-10 h-10 md:w-8 md:h-8 rounded-full bg-green-100 flex items-center justify-center flex-shrink-0">
+  3267→                  <Download className="h-5 w-5 md:h-4 md:w-4 text-green-600" />
+  3268→                </div>
+  3269→                <div>
+  3270→                  <p className="font-medium">{t('action.exportJson')}</p>
+  3271→                  <p className="text-xs text-gray-500">{t('action.exportJsonDesc')}</p>
+  3272→                </div>
+  3273→              </div>
+  3274→            </Button>
+  3275→            
+  3276→            <Button 
+  3277→              className="w-full justify-start h-16 md:h-14 text-left" 
+  3278→              variant="outline"
+  3279→              onClick={() => { fileImportRef.current?.click(); setShowDataDialog(false); }}
+  3280→            >
+  3281→              <div className="flex items-center gap-3">
+  3282→                <div className="w-10 h-10 md:w-8 md:h-8 rounded-full bg-blue-100 flex items-center justify-center flex-shrink-0">
+  3283→                  <Upload className="h-5 w-5 md:h-4 md:w-4 text-blue-600" />
+  3284→                </div>
+  3285→                <div>
+  3286→                  <p className="font-medium">{t('action.importJson')}</p>
+  3287→                  <p className="text-xs text-gray-500">{t('action.importJsonDesc')}</p>
+  3288→                </div>
+  3289→              </div>
+  3290→            </Button>
+  3291→          </div>
+  3292→          <DialogFooter>
+  3293→            <Button variant="outline" onClick={() => setShowDataDialog(false)}>{t('action.cancel')}</Button>
+  3294→          </DialogFooter>
+  3295→        </DialogContent>
+  3296→      </Dialog>
+  3297→
+  3298→      {/* Email Options Dialog */}
+  3299→      <Dialog open={showEmailDialog} onOpenChange={setShowEmailDialog}>
+  3300→        <DialogContent className="max-w-[90vw] md:max-w-lg">
+  3301→          <DialogHeader>
+  3302→            <DialogTitle className="text-lg">Enviar Email</DialogTitle>
+  3303→            <DialogDescription>Selecione o tipo de email que deseja enviar:</DialogDescription>
+  3304→          </DialogHeader>
+  3305→          <div className="space-y-3 pt-4">
+  3306→            <Button 
+  3307→              className="w-full justify-start h-16 md:h-14 text-left" 
+  3308→              variant="outline"
+  3309→              onClick={handleSendAnalysisEmail}
+  3310→            >
+  3311→              <div className="flex items-center gap-3">
+  3312→                <div className="w-10 h-10 md:w-8 md:h-8 rounded-full bg-amber-100 flex items-center justify-center flex-shrink-0">
+  3313→                  <Mail className="h-5 w-5 md:h-4 md:w-4 text-amber-600" />
+  3314→                </div>
+  3315→                <div>
+  3316→                  <div className="font-semibold">Análise</div>
+  3317→                  <div className="text-xs text-gray-500">Envia para Wallysson, Emerson e Jadson</div>
+  3318→                </div>
+  3319→              </div>
+  3320→            </Button>
+  3321→            <Button 
+  3322→              className="w-full justify-start h-16 md:h-14 text-left" 
+  3323→              variant="outline"
+  3324→              onClick={handleSendConclusionEmail}
+  3325→            >
+  3326→              <div className="flex items-center gap-3">
+  3327→                <div className="w-10 h-10 md:w-8 md:h-8 rounded-full bg-emerald-100 flex items-center justify-center flex-shrink-0">
+  3328→                  <Mail className="h-5 w-5 md:h-4 md:w-4 text-emerald-600" />
+  3329→                </div>
+  3330→                <div>
+  3331→                  <div className="font-semibold">Concluído</div>
+  3332→                  <div className="text-xs text-gray-500">Envia para todos os destinatários</div>
+  3333→                </div>
+  3334→              </div>
+  3335→            </Button>
+  3336→          </div>
+  3337→        </DialogContent>
+  3338→      </Dialog>
+  3339→
+  3340→      {/* Translate Dialog - InspecaoContent */}
+  3341→      <Dialog open={showTranslateDialog} onOpenChange={setShowTranslateDialog}>
+  3342→        <DialogContent className="max-w-[90vw] md:max-w-md">
+  3343→          <DialogHeader>
+  3344→            <DialogTitle className="text-lg flex items-center gap-2">
+  3345→              <Globe className="h-5 w-5 text-cyan-500" />
+  3346→              {t('action.translate')}
+  3347→            </DialogTitle>
+  3348→            <DialogDescription>Traduzir todos os textos do relatório</DialogDescription>
+  3349→          </DialogHeader>
+  3350→          
+  3351→          {isTranslating ? (
+  3352→            <div className="py-8 space-y-4 text-center">
+  3353→              <div className="relative w-24 h-24 mx-auto">
+  3354→                <div className="absolute inset-0 rounded-full border-4 border-cyan-200"></div>
+  3355→                <div className="absolute inset-0 rounded-full border-4 border-cyan-500 border-t-transparent animate-spin"></div>
+  3356→                <div className="absolute inset-0 flex items-center justify-center">
+  3357→                  <span className="text-lg font-bold text-cyan-600">
+  3358→                    {translateProgress.total > 0 ? Math.round((translateProgress.current / translateProgress.total) * 100) : 0}%
+  3359→                  </span>
+  3360→                </div>
+  3361→              </div>
+  3362→              <div className="space-y-2">
+  3363→                <p className="font-medium text-gray-700">{translateProgress.status}</p>
+  3364→                {translateProgress.total > 0 && (
+  3365→                  <p className="text-sm text-gray-500">
+  3366→                    {translateProgress.current} / {translateProgress.total} textos
+  3367→                  </p>
+  3368→                )}
+  3369→              </div>
+  3370→              <div className="w-full bg-gray-200 rounded-full h-2">
+  3371→                <div 
+  3372→                  className="bg-cyan-500 h-2 rounded-full transition-all duration-300"
+  3373→                  style={{ width: `${translateProgress.total > 0 ? (translateProgress.current / translateProgress.total) * 100 : 0}%` }}
+  3374→                />
+  3375→              </div>
+  3376→            </div>
+  3377→          ) : (
+  3378→            <div className="space-y-3 pt-4">
+  3379→              <p className="text-sm text-gray-600 mb-4">Selecione o idioma de destino:</p>
+  3380→              <div className="grid grid-cols-3 gap-2">
+  3381→                {(['pt', 'en', 'ja', 'zh'] as Language[]).map((lang) => (
+  3382→                  <Button
+  3383→                    key={lang}
+  3384→                    variant="outline"
+  3385→                    className="h-20 flex flex-col items-center justify-center gap-1"
+  3386→                    onClick={() => handleTranslateAll(lang)}
+  3387→                  >
+  3388→                    <span className="text-2xl">{LANGUAGE_FLAGS[lang]}</span>
+  3389→                    <span className="text-xs font-medium">{LANGUAGE_NAMES[lang]}</span>
+  3390→                  </Button>
+  3391→                ))}
+  3392→              </div>
+  3393→            </div>
+  3394→          )}
+  3395→          
+  3396→          {!isTranslating && (
+  3397→            <DialogFooter>
+  3398→              <Button variant="outline" onClick={() => setShowTranslateDialog(false)}>
+  3399→                {t('action.cancel')}
+  3400→              </Button>
+  3401→            </DialogFooter>
+  3402→          )}
+  3403→        </DialogContent>
+  3404→      </Dialog>
+  3405→
+  3406→      {/* Move Photo Dialog */}
+  3407→      <Dialog open={showMovePhotoDialog} onOpenChange={(open) => { setShowMovePhotoDialog(open); if (!open) setMovePhotoFromIndex(null); }}>
+  3408→        <DialogContent className="max-w-[90vw] md:max-w-md">
+  3409→          <DialogHeader>
+  3410→            <DialogTitle className="text-lg flex items-center gap-2">
+  3411→              <ArrowUpRight className="h-5 w-5 text-orange-500" />
+  3412→              Mover Foto
+  3413→            </DialogTitle>
+  3414→            <DialogDescription>
+  3415→              {movePhotoFromIndex !== null ? `Mover foto ${movePhotoFromIndex + 1} para:` : 'Selecione a posição de destino'}
+  3416→            </DialogDescription>
+  3417→          </DialogHeader>
+  3418→          
+  3419→          <div className="space-y-4 pt-4">
+  3420→            <div className="space-y-2">
+  3421→              <Label>Posição de destino:</Label>
+  3422→              <Select value={String(movePhotoToIndex)} onValueChange={(v) => setMovePhotoToIndex(Number(v))}>
+  3423→                <SelectTrigger>
+  3424→                  <SelectValue />
+  3425→                </SelectTrigger>
+  3426→                <SelectContent>
+  3427→                  {photos.map((_, idx) => (
+  3428→                    <SelectItem key={idx} value={String(idx)}>
+  3429→                      Posição {idx + 1} {idx === movePhotoFromIndex ? '(atual)' : ''}
+  3430→                    </SelectItem>
+  3431→                  ))}
+  3432→                </SelectContent>
+  3433→              </Select>
+  3434→            </div>
+  3435→            
+  3436→            <div className="flex gap-2">
+  3437→              <Button variant="outline" className="flex-1" onClick={() => { setShowMovePhotoDialog(false); setMovePhotoFromIndex(null); }}>
+  3438→                Cancelar
+  3439→              </Button>
+  3440→              <Button className="flex-1 bg-orange-500 hover:bg-orange-600" onClick={handleMovePhotoToPosition}>
+  3441→                Mover
+  3442→              </Button>
+  3443→            </div>
+  3444→          </div>
+  3445→        </DialogContent>
+  3446→      </Dialog>
+  3447→
+  3448→      {/* Cover Page */}
+  3449→      <section className="p-8">
+  3450→        <Card className="max-w-4xl mx-auto">
+  3451→          <CardHeader><CardTitle className="text-2xl font-bold">{t('report.technicalReport')}</CardTitle></CardHeader>
+  3452→          <CardContent className="space-y-6">
+  3453→            <div className="space-y-4">
+  3454→              <h3 className="text-lg font-semibold flex items-center gap-2"><Package className="h-5 w-5 text-orange-500" />{t('report.executionInfo')}</h3>
+  3455→              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+  3456→                <div className="space-y-2"><Label>{t('report.tag')}</Label><Input list="tag-options-insp" value={inspection.tag} onChange={(e) => handleTagChange(e.target.value)} placeholder={t('placeholder.tag')} /><datalist id="tag-options-insp">{TAG_OPTIONS.map(tag => (<option key={tag} value={tag} />))}</datalist></div>
+  3457→                <div className="space-y-2"><Label>{t('report.modelo')}</Label><Input value={inspection.modelo} onChange={(e) => updateInspection({ modelo: e.target.value })} placeholder={t('placeholder.modelo')} /></div>
+  3458→                <div className="space-y-2"><Label>{t('report.sn')}</Label><Input value={inspection.sn} onChange={(e) => updateInspection({ sn: e.target.value })} placeholder={t('placeholder.sn')} /></div>
+  3459→                <div className="space-y-2"><Label>{t('report.entrega')}</Label><Input value={inspection.entrega} onChange={(e) => updateInspection({ entrega: e.target.value })} placeholder={t('placeholder.entrega')} /></div>
+  3460→                <div className="space-y-2"><Label>{t('report.cliente')}</Label><Input value={inspection.cliente} onChange={(e) => updateInspection({ cliente: e.target.value })} placeholder={t('placeholder.cliente')} /></div>
+  3461→                <div className="space-y-2"><Label>{t('report.descricao')}</Label><Input value={inspection.descricao} onChange={(e) => updateInspection({ descricao: e.target.value })} placeholder={t('placeholder.descricao')} /></div>
+  3462→                <div className="space-y-2"><Label>{t('report.machineDown')}</Label><Select value={inspection.machineDown} onValueChange={(value) => updateInspection({ machineDown: value as 'Yes' | 'No' })}><SelectTrigger><SelectValue placeholder={t('select.selectOption')} /></SelectTrigger><SelectContent><SelectItem value="No">{t('select.no')}</SelectItem><SelectItem value="Yes">{t('select.yes')}</SelectItem></SelectContent></Select></div>
+
+[showing lines 1463-3462 of 4056; use offset=3463 with limit to continue reading]
