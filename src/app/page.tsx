@@ -2267,10 +2267,10 @@ function HomeContent({ reportId, onRegenerateId }: { reportId: string; onRegener
                                 </Select>
                               </div>
                               <div className="flex items-center gap-2 p-2 bg-amber-100 rounded-lg border-2 border-amber-400">
-                                <Checkbox id={`subparts-home-${category.id}-${photo.id}`} checked={showAdditionalParts[`${category.id}-${photo.id}`] || (photo.pn && category.additionalParts.filter(ap => ap.parentPn === photo.pn && (ap.pn || ap.partName)).length > 0)} onCheckedChange={(checked) => setShowAdditionalParts(prev => ({ ...prev, [`${category.id}-${photo.id}`]: !!checked }))} className="border-amber-600 data-[state=checked]:bg-amber-500" />
+                                <Checkbox id={`subparts-home-${category.id}-${photo.id}`} checked={showAdditionalParts[`${category.id}-${photo.id}`] || category.additionalParts.filter(ap => ap.parentPn && ap.parentPn === photo.pn && (ap.pn || ap.partName)).length > 0} onCheckedChange={(checked) => setShowAdditionalParts(prev => ({ ...prev, [`${category.id}-${photo.id}`]: !!checked }))} className="border-amber-600 data-[state=checked]:bg-amber-500" />
                                 <Label htmlFor={`subparts-home-${category.id}-${photo.id}`} className="text-sm font-bold text-amber-800 cursor-pointer flex items-center gap-1"><ListTree className="h-4 w-4" /> {t('subparts.title')}</Label>
                               </div>
-                              {(showAdditionalParts[`${category.id}-${photo.id}`] || (photo.pn && category.additionalParts.filter(ap => ap.parentPn === photo.pn && (ap.pn || ap.partName)).length > 0)) && (
+                              {(showAdditionalParts[`${category.id}-${photo.id}`] || category.additionalParts.filter(ap => ap.parentPn && ap.parentPn === photo.pn && (ap.pn || ap.partName)).length > 0) && (
                                 <AdditionalPartsSection parentPn={photo.pn} additionalParts={category.additionalParts} onAddPart={(part) => addAdditionalPartToCategory(category.id, part)} onRemovePart={(id) => removeAdditionalPartFromCategory(category.id, id)} t={t} />
                               )}
                             </div>
@@ -3512,10 +3512,10 @@ function InspecaoContent({ reportId, onRegenerateId }: { reportId: string; onReg
                     </Select>
                   </div>
                   <div className="flex items-center gap-2 p-2 bg-amber-100 rounded-lg border-2 border-amber-400">
-                    <Checkbox id={`subparts-insp-${photo.id}`} checked={showAdditionalParts[photo.id] || (photo.pn && additionalParts.filter(ap => ap.parentPn === photo.pn && (ap.pn || ap.partName)).length > 0)} onCheckedChange={(checked) => setShowAdditionalParts(prev => ({ ...prev, [photo.id]: !!checked }))} className="border-amber-600 data-[state=checked]:bg-amber-500" />
+                    <Checkbox id={`subparts-insp-${photo.id}`} checked={showAdditionalParts[photo.id] || additionalParts.filter(ap => ap.parentPn && ap.parentPn === photo.pn && (ap.pn || ap.partName)).length > 0} onCheckedChange={(checked) => setShowAdditionalParts(prev => ({ ...prev, [photo.id]: !!checked }))} className="border-amber-600 data-[state=checked]:bg-amber-500" />
                     <Label htmlFor={`subparts-insp-${photo.id}`} className="text-sm font-bold text-amber-800 cursor-pointer flex items-center gap-1"><ListTree className="h-4 w-4" /> {t('subparts.title')}</Label>
                   </div>
-                  {(showAdditionalParts[photo.id] || (photo.pn && additionalParts.filter(ap => ap.parentPn === photo.pn && (ap.pn || ap.partName)).length > 0)) && (
+                  {(showAdditionalParts[photo.id] || additionalParts.filter(ap => ap.parentPn && ap.parentPn === photo.pn && (ap.pn || ap.partName)).length > 0) && (
                     <AdditionalPartsSection parentPn={photo.pn} additionalParts={additionalParts} onAddPart={(part) => addAdditionalPart(part)} onRemovePart={(id) => removeAdditionalPart(id)} t={t} />
                   )}
                 </div>
