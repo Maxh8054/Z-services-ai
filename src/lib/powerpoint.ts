@@ -536,15 +536,6 @@ async function generateMachineIdentificationSlide(pptx: pptxgen, inspection: Ins
   
   // Photo 1: Equipamento
   const photo1X = startX;
-  slide.addShape(pptx.ShapeType.rect, {
-    x: photo1X,
-    y: photoY,
-    w: photoWidth,
-    h: photoHeight,
-    fill: { color: 'F5F5F5' },
-    line: { color: 'CCCCCC', width: 2, dashType: 'dash' },
-  });
-  
   if (inspection.machinePhoto) {
     const processed = await maybeCoverCropImage(inspection.machinePhoto, { targetW: photoWidth, targetH: photoHeight });
     slide.addImage({
@@ -555,6 +546,14 @@ async function generateMachineIdentificationSlide(pptx: pptxgen, inspection: Ins
       h: photoHeight,
     });
   } else {
+    slide.addShape(pptx.ShapeType.rect, {
+      x: photo1X,
+      y: photoY,
+      w: photoWidth,
+      h: photoHeight,
+      fill: { color: 'F5F5F5' },
+      line: { color: 'CCCCCC', width: 2, dashType: 'dash' },
+    });
     // Placeholder with camera icon
     slide.addText('📷', {
       x: photo1X,
@@ -601,15 +600,6 @@ async function generateMachineIdentificationSlide(pptx: pptxgen, inspection: Ins
   
   // Photo 2: Horímetro
   const photo2X = startX + photoWidth + gap;
-  slide.addShape(pptx.ShapeType.rect, {
-    x: photo2X,
-    y: photoY,
-    w: photoWidth,
-    h: photoHeight,
-    fill: { color: 'F5F5F5' },
-    line: { color: 'CCCCCC', width: 2, dashType: 'dash' },
-  });
-  
   if (inspection.horimetroPhoto) {
     const processed = await maybeCoverCropImage(inspection.horimetroPhoto, { targetW: photoWidth, targetH: photoHeight });
     slide.addImage({
@@ -620,6 +610,14 @@ async function generateMachineIdentificationSlide(pptx: pptxgen, inspection: Ins
       h: photoHeight,
     });
   } else {
+    slide.addShape(pptx.ShapeType.rect, {
+      x: photo2X,
+      y: photoY,
+      w: photoWidth,
+      h: photoHeight,
+      fill: { color: 'F5F5F5' },
+      line: { color: 'CCCCCC', width: 2, dashType: 'dash' },
+    });
     // Placeholder with camera icon
     slide.addText('📷', {
       x: photo2X,
@@ -666,15 +664,7 @@ async function generateMachineIdentificationSlide(pptx: pptxgen, inspection: Ins
   
   // Photo 3: Serial Number
   const photo3X = startX + (photoWidth + gap) * 2;
-  slide.addShape(pptx.ShapeType.rect, {
-    x: photo3X,
-    y: photoY,
-    w: photoWidth,
-    h: photoHeight,
-    fill: { color: inspection.serialPhoto ? 'F5F5F5' : '000000' },
-    line: { color: 'CCCCCC', width: 2, dashType: inspection.serialPhoto ? 'dash' : 'solid' },
-  });
-  
+
   if (inspection.serialPhoto) {
     const processed = await maybeCoverCropImage(inspection.serialPhoto, { targetW: photoWidth, targetH: photoHeight });
     slide.addImage({
@@ -686,6 +676,14 @@ async function generateMachineIdentificationSlide(pptx: pptxgen, inspection: Ins
     });
   } else {
     // Black background with white serial number text
+    slide.addShape(pptx.ShapeType.rect, {
+      x: photo3X,
+      y: photoY,
+      w: photoWidth,
+      h: photoHeight,
+      fill: { color: '000000' },
+      line: { color: 'CCCCCC', width: 2, dashType: 'solid' },
+    });
     const serialNumber = inspection.sn || '-';
     slide.addText(serialNumber, {
       x: photo3X,
@@ -722,15 +720,6 @@ async function generateMachineIdentificationSlide(pptx: pptxgen, inspection: Ins
   
   // Photo 4: Local
   const photo4X = startX + (photoWidth + gap) * 3;
-  slide.addShape(pptx.ShapeType.rect, {
-    x: photo4X,
-    y: photoY,
-    w: photoWidth,
-    h: photoHeight,
-    fill: { color: 'F5F5F5' },
-    line: { color: 'CCCCCC', width: 2, dashType: 'dash' },
-  });
-  
   if (inspection.localPhoto) {
     const processed = await maybeCoverCropImage(inspection.localPhoto, { targetW: photoWidth, targetH: photoHeight });
     slide.addImage({
@@ -741,6 +730,14 @@ async function generateMachineIdentificationSlide(pptx: pptxgen, inspection: Ins
       h: photoHeight,
     });
   } else {
+    slide.addShape(pptx.ShapeType.rect, {
+      x: photo4X,
+      y: photoY,
+      w: photoWidth,
+      h: photoHeight,
+      fill: { color: 'F5F5F5' },
+      line: { color: 'CCCCCC', width: 2, dashType: 'dash' },
+    });
     // Placeholder with camera icon
     slide.addText('📷', {
       x: photo4X,
@@ -868,7 +865,7 @@ async function addPhotoToSlide(
   const hasSecondaryPhoto = photo.secondaryImageData && photo.imageData;
   
   // Calculate photo widths
-  const dualGap = 0.15;  // Gap between primary and secondary photo
+  const dualGap = 0.02;  // Minimal gap between primary and secondary photo
   const photoWidth = hasSecondaryPhoto ? (w - dualGap) / 2 : w;
   
   // Photo info overlay (if PN exists)
