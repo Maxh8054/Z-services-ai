@@ -1145,8 +1145,12 @@ function PhotoEditor({
     const canvas = canvasRef.current;
     if (canvas) {
       try {
-        const editedImageData = canvas.toDataURL('image/png');
-        onSave({ embeddedPhotos, editedImageData });
+        const canvasData = canvas.toDataURL('image/png');
+        if (editMode === 'secondary') {
+          onSave({ embeddedPhotos, secondaryImageData: canvasData });
+        } else {
+          onSave({ embeddedPhotos, editedImageData: canvasData });
+        }
       } catch (error) {
         console.error('Error exporting canvas:', error);
         onSave({ embeddedPhotos });
