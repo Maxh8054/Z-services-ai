@@ -248,8 +248,8 @@ async function getAspectRatioHeight(targetW: number, imgData: string): Promise<n
     const info = await getImageInfo(imgData);
     const ratio = info.height / info.width;
     const h = targetW * ratio;
-    // Clamp between 2.5 and 5.0 inches
-    return Math.max(2.5, Math.min(5.0, h));
+    // Clamp between 2.0 and 3.2 inches
+    return Math.max(2.0, Math.min(3.2, h));
   } catch {
     return PHOTO_LANDSCAPE_H;
   }
@@ -295,12 +295,12 @@ async function generateCategorySlides(
       w1 = DUAL_SLOT_W;
       w2 = usableW - w1 - gap;
       h1 = DUAL_PHOTO_H;
-      h2 = photo2 ? (photo2.editedImageData || photo2.imageData ? getAspectRatioHeight(w2, photo2.editedImageData || photo2.imageData!) : PHOTO_LANDSCAPE_H) : PHOTO_LANDSCAPE_H;
+      h2 = photo2 ? (photo2.editedImageData || photo2.imageData ? await getAspectRatioHeight(w2, photo2.editedImageData || photo2.imageData!) : PHOTO_LANDSCAPE_H) : PHOTO_LANDSCAPE_H;
     } else if (isDual2) {
       // Photo 1 single, photo 2 dual
       w2 = DUAL_SLOT_W;
       w1 = usableW - w2 - gap;
-      h1 = photo1 ? (photo1.editedImageData || photo1.imageData ? getAspectRatioHeight(w1, photo1.editedImageData || photo1.imageData!) : PHOTO_LANDSCAPE_H) : PHOTO_LANDSCAPE_H;
+      h1 = photo1 ? (photo1.editedImageData || photo1.imageData ? await getAspectRatioHeight(w1, photo1.editedImageData || photo1.imageData!) : PHOTO_LANDSCAPE_H) : PHOTO_LANDSCAPE_H;
       h2 = DUAL_PHOTO_H;
     } else {
       // Both single: use orientation detection
@@ -817,11 +817,11 @@ async function generatePhotoSlides(pptx: pptxgen, photos: PhotoData[], language:
       w1 = DUAL_SLOT_W;
       w2 = usableW - w1 - gap;
       h1 = DUAL_PHOTO_H;
-      h2 = photo2 ? (photo2.editedImageData || photo2.imageData ? getAspectRatioHeight(w2, photo2.editedImageData || photo2.imageData!) : PHOTO_LANDSCAPE_H) : PHOTO_LANDSCAPE_H;
+      h2 = photo2 ? (photo2.editedImageData || photo2.imageData ? await getAspectRatioHeight(w2, photo2.editedImageData || photo2.imageData!) : PHOTO_LANDSCAPE_H) : PHOTO_LANDSCAPE_H;
     } else if (isDual2) {
       w2 = DUAL_SLOT_W;
       w1 = usableW - w2 - gap;
-      h1 = photo1 ? (photo1.editedImageData || photo1.imageData ? getAspectRatioHeight(w1, photo1.editedImageData || photo1.imageData!) : PHOTO_LANDSCAPE_H) : PHOTO_LANDSCAPE_H;
+      h1 = photo1 ? (photo1.editedImageData || photo1.imageData ? await getAspectRatioHeight(w1, photo1.editedImageData || photo1.imageData!) : PHOTO_LANDSCAPE_H) : PHOTO_LANDSCAPE_H;
       h2 = DUAL_PHOTO_H;
     } else {
       const dims1 = photo1 ? await getPhotoDimensions(photo1) : null;

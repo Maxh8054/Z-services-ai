@@ -180,3 +180,19 @@ Stage Summary:
 - Single photos: 4.6x4.5" (was 4.4x2.8") — 60% taller
 - Lateral margins reduced from 0.3" to 0.15" for more photo space
 - No lint errors, compiles cleanly
+---
+Task ID: 1
+Agent: main
+Task: Fix PPT photo height - reduce from 3.6 to 3.0, fix missing await on getAspectRatioHeight
+
+Work Log:
+- Reduced PHOTO_LANDSCAPE_H, PHOTO_PORTRAIT_H, DUAL_PHOTO_H from 3.6 to 3.0
+- Fixed PN info overlay position from y-0.4 to y-0.25 to not overlap with header separator
+- Found and fixed critical bug: getAspectRatioHeight is async but was called without await in 4 places (2 in generateCategorySlides, 2 in generatePhotoSlides). This caused height to be a Promise object instead of a number, making photos disappear when a dual photo shared a slide with a single photo.
+- Reduced getAspectRatioHeight max clamp from 5.0 to 3.2 to prevent overly tall photos
+
+Stage Summary:
+- Photos no longer disappear due to missing await
+- PN info no longer overlaps with header logo/separator
+- Description stays on same slide with reduced 3.0" height
+- File modified: /src/lib/powerpoint.ts
