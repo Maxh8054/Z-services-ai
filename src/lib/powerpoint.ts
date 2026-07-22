@@ -280,7 +280,7 @@ async function generateCategorySlides(
     
     // Calculate widths: dual photos get wider slots
     let w1: number, h1: number, w2: number, h2: number;
-    const y = 1.2;
+    const y = 1.35;
     const gap = 0.2;
     const usableW = 10 - SLIDE_MARGIN * 2;
     
@@ -804,7 +804,7 @@ async function generatePhotoSlides(pptx: pptxgen, photos: PhotoData[], language:
     const isDual2 = !!(photo2?.secondaryImageData && photo2?.imageData);
     
     let w1: number, h1: number, w2: number, h2: number;
-    const y = 1.2;
+    const y = 1.35;
     const gap = 0.2;
     const usableW = 10 - SLIDE_MARGIN * 2;
     
