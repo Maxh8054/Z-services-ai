@@ -7,13 +7,13 @@ import { coverCropImage, maybeCoverCropImage, getImageInfo } from './coverCrop';
 
 // Photo dimensions in inches
 const SLIDE_MARGIN = 0.15;  // Reduced lateral margin
-const PHOTO_LANDSCAPE_W = 4.6;
-const PHOTO_LANDSCAPE_H = 4.5;
-const PHOTO_PORTRAIT_W = 3.4;
-const PHOTO_PORTRAIT_H = 4.5;
-// Full-width dimensions for dual (side-by-side) photos
-const DUAL_PHOTO_W = 10 - SLIDE_MARGIN * 2;  // ~9.7"
-const DUAL_PHOTO_H = 4.5;
+const PHOTO_LANDSCAPE_W = 4.4;
+const PHOTO_LANDSCAPE_H = 3.6;
+const PHOTO_PORTRAIT_W = 3.1;
+const PHOTO_PORTRAIT_H = 3.6;
+// When one slot is dual (side-by-side), it gets extra width
+const DUAL_SLOT_W = 5.6;  // wider slot for dual photo container
+const DUAL_PHOTO_H = 3.6;
 
 // Sanitize text for use in filenames
 function sanitizeForFilename(text: string): string {
@@ -239,6 +239,22 @@ function layoutPhotos(
   return result;
 }
 
+/**
+ * Get height based on image aspect ratio for a given width.
+ * Returns a default height if image data can't be parsed.
+ */
+async function getAspectRatioHeight(targetW: number, imgData: string): Promise<number> {
+  try {
+    const info = await getImageInfo(imgData);
+    const ratio = info.height / info.width;
+    const h = targetW * ratio;
+    // Clamp between 2.5 and 5.0 inches
+    return Math.max(2.5, Math.min(5.0, h));
+  } catch {
+    return PHOTO_LANDSCAPE_H;
+  }
+}
+
 async function generateCategorySlides(
   pptx: pptxgen, 
   category: PhotoCategory, 
@@ -247,53 +263,73 @@ async function generateCategorySlides(
 ) {
   const isTranslated = language !== 'pt';
   const photosWithImages = category.photos.filter(p => p.imageData);
+  const slideCount = Math.ceil(photosWithImages.length / 2);
   
   // Get translated title
   const { title: translatedTitle } = getCategoryTranslation(category.id, language);
   
-  let photoRef = 0;
-  let i = 0;
-  
-  while (i < photosWithImages.length) {
-    const photo = photosWithImages[i];
-    const isDual = !!(photo.secondaryImageData && photo.imageData);
+  for (let i = 0; i < slideCount; i++) {
+    const slide = pptx.addSlide();
+    addCategoryHeader(slide, `${categoryNumber}. ${translatedTitle.toUpperCase()}`);
     
-    if (isDual) {
-      // Dual photo gets its own full-width slide
-      photoRef++;
-      const slide = pptx.addSlide();
-      addCategoryHeader(slide, `${categoryNumber}. ${translatedTitle.toUpperCase()}`);
-      await addPhotoToSlide(slide, photo, SLIDE_MARGIN, 1.2, DUAL_PHOTO_W, DUAL_PHOTO_H, language, String(photoRef));
-      addStandardFooter(slide);
-      i++;
+    const photo1 = photosWithImages[i * 2];
+    const photo2 = photosWithImages[i * 2 + 1];
+    
+    const isDual1 = !!(photo1?.secondaryImageData && photo1?.imageData);
+    const isDual2 = !!(photo2?.secondaryImageData && photo2?.imageData);
+    
+    // Calculate widths: dual photos get wider slots
+    let w1: number, h1: number, w2: number, h2: number;
+    const y = 1.2;
+    const gap = 0.2;
+    const usableW = 10 - SLIDE_MARGIN * 2;
+    
+    if (isDual1 && isDual2) {
+      // Both dual: equal wide slots
+      w1 = (usableW - gap) / 2;
+      w2 = w1;
+      h1 = DUAL_PHOTO_H;
+      h2 = DUAL_PHOTO_H;
+    } else if (isDual1) {
+      // Photo 1 dual, photo 2 single
+      w1 = DUAL_SLOT_W;
+      w2 = usableW - w1 - gap;
+      h1 = DUAL_PHOTO_H;
+      h2 = photo2 ? (photo2.editedImageData || photo2.imageData ? getAspectRatioHeight(w2, photo2.editedImageData || photo2.imageData!) : PHOTO_LANDSCAPE_H) : PHOTO_LANDSCAPE_H;
+    } else if (isDual2) {
+      // Photo 1 single, photo 2 dual
+      w2 = DUAL_SLOT_W;
+      w1 = usableW - w2 - gap;
+      h1 = photo1 ? (photo1.editedImageData || photo1.imageData ? getAspectRatioHeight(w1, photo1.editedImageData || photo1.imageData!) : PHOTO_LANDSCAPE_H) : PHOTO_LANDSCAPE_H;
+      h2 = DUAL_PHOTO_H;
     } else {
-      // Single photo - try to pair with next single photo
-      const nextPhoto = (i + 1 < photosWithImages.length && !photosWithImages[i + 1].secondaryImageData)
-        ? photosWithImages[i + 1]
-        : null;
+      // Both single: use orientation detection
+      const dims1 = photo1 ? await getPhotoDimensions(photo1) : null;
+      const dims2 = photo2 ? await getPhotoDimensions(photo2) : null;
+      const positions = layoutPhotos(dims1, dims2, y, gap);
       
-      const slide = pptx.addSlide();
-      addCategoryHeader(slide, `${categoryNumber}. ${translatedTitle.toUpperCase()}`);
-      
-      // Photo 1
-      photoRef++;
-      const dims1 = await getPhotoDimensions(photo);
-      const pos1 = { x: (10 - dims1.w) / 2, y: 1.2, w: dims1.w, h: dims1.h };
-      await addPhotoToSlide(slide, photo, pos1.x, pos1.y, pos1.w, pos1.h, language, String(photoRef));
-      
-      // Photo 2 (if available)
-      if (nextPhoto) {
-        photoRef++;
-        const dims2 = await getPhotoDimensions(nextPhoto);
-        const positions = layoutPhotos(dims1, dims2, 1.2, 0.2);
-        await addPhotoToSlide(slide, nextPhoto, positions[1].x, positions[1].y, positions[1].w, positions[1].h, language, String(photoRef));
-        i += 2;
-      } else {
-        i++;
+      if (photo1?.imageData && positions[0]) {
+        await addPhotoToSlide(slide, photo1, positions[0].x, positions[0].y, positions[0].w, positions[0].h, language, String(i * 2 + 1));
       }
-      
+      if (photo2?.imageData && positions[1]) {
+        await addPhotoToSlide(slide, photo2, positions[1].x, positions[1].y, positions[1].w, positions[1].h, language, String(i * 2 + 2));
+      }
       addStandardFooter(slide);
+      continue;
     }
+    
+    // Place photos with calculated widths
+    const x1 = SLIDE_MARGIN;
+    const x2 = x1 + w1 + gap;
+    
+    if (photo1?.imageData) {
+      await addPhotoToSlide(slide, photo1, x1, y, w1, h1, language, String(i * 2 + 1));
+    }
+    if (photo2?.imageData) {
+      await addPhotoToSlide(slide, photo2, x2, y, w2, h2, language, String(i * 2 + 2));
+    }
+    
+    addStandardFooter(slide);
   }
 }
 
@@ -755,50 +791,64 @@ async function generateMachineIdentificationSlide(pptx: pptxgen, inspection: Ins
 async function generatePhotoSlides(pptx: pptxgen, photos: PhotoData[], language: Language) {
   const isTranslated = language !== 'pt';
   const photosWithImages = photos.filter(p => p.imageData);
+  const slideCount = Math.ceil(photosWithImages.length / 2);
   
-  let photoRef = 0;
-  let i = 0;
-  
-  while (i < photosWithImages.length) {
-    const photo = photosWithImages[i];
-    const isDual = !!(photo.secondaryImageData && photo.imageData);
+  for (let i = 0; i < slideCount; i++) {
+    const slide = pptx.addSlide();
+    addStandardHeader(slide, isTranslated ? 'PHOTOS' : 'FOTOS');
     
-    if (isDual) {
-      // Dual photo gets its own full-width slide
-      photoRef++;
-      const slide = pptx.addSlide();
-      addStandardHeader(slide, isTranslated ? 'PHOTOS' : 'FOTOS');
-      await addPhotoToSlide(slide, photo, SLIDE_MARGIN, 1.2, DUAL_PHOTO_W, DUAL_PHOTO_H, language, String(photoRef));
-      addStandardFooter(slide);
-      i++;
+    const photo1 = photosWithImages[i * 2];
+    const photo2 = photosWithImages[i * 2 + 1];
+    
+    const isDual1 = !!(photo1?.secondaryImageData && photo1?.imageData);
+    const isDual2 = !!(photo2?.secondaryImageData && photo2?.imageData);
+    
+    let w1: number, h1: number, w2: number, h2: number;
+    const y = 1.2;
+    const gap = 0.2;
+    const usableW = 10 - SLIDE_MARGIN * 2;
+    
+    if (isDual1 && isDual2) {
+      w1 = (usableW - gap) / 2;
+      w2 = w1;
+      h1 = DUAL_PHOTO_H;
+      h2 = DUAL_PHOTO_H;
+    } else if (isDual1) {
+      w1 = DUAL_SLOT_W;
+      w2 = usableW - w1 - gap;
+      h1 = DUAL_PHOTO_H;
+      h2 = photo2 ? (photo2.editedImageData || photo2.imageData ? getAspectRatioHeight(w2, photo2.editedImageData || photo2.imageData!) : PHOTO_LANDSCAPE_H) : PHOTO_LANDSCAPE_H;
+    } else if (isDual2) {
+      w2 = DUAL_SLOT_W;
+      w1 = usableW - w2 - gap;
+      h1 = photo1 ? (photo1.editedImageData || photo1.imageData ? getAspectRatioHeight(w1, photo1.editedImageData || photo1.imageData!) : PHOTO_LANDSCAPE_H) : PHOTO_LANDSCAPE_H;
+      h2 = DUAL_PHOTO_H;
     } else {
-      // Single photo - try to pair with next single photo
-      const nextPhoto = (i + 1 < photosWithImages.length && !photosWithImages[i + 1].secondaryImageData)
-        ? photosWithImages[i + 1]
-        : null;
+      const dims1 = photo1 ? await getPhotoDimensions(photo1) : null;
+      const dims2 = photo2 ? await getPhotoDimensions(photo2) : null;
+      const positions = layoutPhotos(dims1, dims2, y, gap);
       
-      const slide = pptx.addSlide();
-      addStandardHeader(slide, isTranslated ? 'PHOTOS' : 'FOTOS');
-      
-      // Photo 1
-      photoRef++;
-      const dims1 = await getPhotoDimensions(photo);
-      const pos1 = { x: (10 - dims1.w) / 2, y: 1.2, w: dims1.w, h: dims1.h };
-      await addPhotoToSlide(slide, photo, pos1.x, pos1.y, pos1.w, pos1.h, language, String(photoRef));
-      
-      // Photo 2 (if available)
-      if (nextPhoto) {
-        photoRef++;
-        const dims2 = await getPhotoDimensions(nextPhoto);
-        const positions = layoutPhotos(dims1, dims2, 1.2, 0.2);
-        await addPhotoToSlide(slide, nextPhoto, positions[1].x, positions[1].y, positions[1].w, positions[1].h, language, String(photoRef));
-        i += 2;
-      } else {
-        i++;
+      if (photo1?.imageData && positions[0]) {
+        await addPhotoToSlide(slide, photo1, positions[0].x, positions[0].y, positions[0].w, positions[0].h, language, String(i * 2 + 1));
       }
-      
+      if (photo2?.imageData && positions[1]) {
+        await addPhotoToSlide(slide, photo2, positions[1].x, positions[1].y, positions[1].w, positions[1].h, language, String(i * 2 + 2));
+      }
       addStandardFooter(slide);
+      continue;
     }
+    
+    const x1 = SLIDE_MARGIN;
+    const x2 = x1 + w1 + gap;
+    
+    if (photo1?.imageData) {
+      await addPhotoToSlide(slide, photo1, x1, y, w1, h1, language, String(i * 2 + 1));
+    }
+    if (photo2?.imageData) {
+      await addPhotoToSlide(slide, photo2, x2, y, w2, h2, language, String(i * 2 + 2));
+    }
+    
+    addStandardFooter(slide);
   }
 }
 
