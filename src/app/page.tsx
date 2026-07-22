@@ -1805,14 +1805,34 @@ function HomeContent({ reportId, onRegenerateId }: { reportId: string; onRegener
         }
         // Import categories with all photos and additional parts
         if (data.categories && Array.isArray(data.categories)) {
+          // Fix sub-part associations: if sub-part has parentPn but photo has no PN, set it
+          data.categories.forEach((cat: any) => {
+            if (cat.additionalParts && cat.additionalParts.length > 0) {
+              const subPartsByParent = new Map<string, any[]>();
+              cat.additionalParts.forEach((ap: any) => {
+                if (ap.parentPn) {
+                  if (!subPartsByParent.has(ap.parentPn)) subPartsByParent.set(ap.parentPn, []);
+                  subPartsByParent.get(ap.parentPn)!.push(ap);
+                }
+              });
+              subPartsByParent.forEach((subs, parentPn) => {
+                let matchedPhoto = cat.photos.find((p: any) => p.pn === parentPn);
+                if (!matchedPhoto) {
+                  matchedPhoto = cat.photos.find((p: any) => !p.pn);
+                  if (matchedPhoto) matchedPhoto.pn = parentPn;
+                }
+              });
+            }
+          });
+
           setCategories(data.categories);
           // Auto-expand sub-parts sections for photos that have them
           const expandMap: Record<string, boolean> = {};
           data.categories.forEach((cat: any) => {
             if (cat.additionalParts && cat.additionalParts.length > 0) {
-              const parentPns = new Set(cat.additionalParts.map((p: any) => p.parentPn));
+              const parentPns = new Set(cat.additionalParts.map((p: any) => p.parentPn).filter(Boolean));
               cat.photos.forEach((photo: any) => {
-                if (photo.pn && parentPns.has(photo.pn)) {
+                if (parentPns.has(photo.pn)) {
                   expandMap[`${cat.id}-${photo.id}`] = true;
                 }
               });
@@ -2843,6 +2863,23 @@ function InspecaoContent({ reportId, onRegenerateId }: { reportId: string; onReg
         }
         // Import photos with all data including imageData
         if (data.photos && Array.isArray(data.photos)) {
+          // Fix sub-part associations: if sub-part has parentPn but photo has no PN, set it
+          if (data.additionalParts && Array.isArray(data.additionalParts)) {
+            const subPartsByParent = new Map<string, any[]>();
+            data.additionalParts.forEach((ap: any) => {
+              if (ap.parentPn) {
+                if (!subPartsByParent.has(ap.parentPn)) subPartsByParent.set(ap.parentPn, []);
+                subPartsByParent.get(ap.parentPn)!.push(ap);
+              }
+            });
+            subPartsByParent.forEach((subs, parentPn) => {
+              let matchedPhoto = data.photos.find((p: any) => p.pn === parentPn);
+              if (!matchedPhoto) {
+                matchedPhoto = data.photos.find((p: any) => !p.pn);
+                if (matchedPhoto) matchedPhoto.pn = parentPn;
+              }
+            });
+          }
           setPhotos(data.photos);
         }
         // Import additional parts
@@ -2851,9 +2888,9 @@ function InspecaoContent({ reportId, onRegenerateId }: { reportId: string; onReg
           // Auto-expand sub-parts sections for photos that have them
           const importedPhotos = data.photos || photos;
           const expandMap: Record<string, boolean> = {};
-          const parentPns = new Set(data.additionalParts.map((p: any) => p.parentPn));
+          const parentPns = new Set(data.additionalParts.map((p: any) => p.parentPn).filter(Boolean));
           importedPhotos.forEach((photo: any) => {
-            if (photo.pn && parentPns.has(photo.pn)) {
+            if (parentPns.has(photo.pn)) {
               expandMap[photo.id] = true;
             }
           });
