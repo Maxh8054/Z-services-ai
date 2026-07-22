@@ -41,6 +41,7 @@ export interface AdditionalPart {
   quantity: string;
   criticality: Criticality; // Criticidade: Alta, Média, Baixa
   parentPn: string; // PN da peça principal
+  photoId?: string; // ID da foto principal (para associação quando PN está vazio)
 }
 
 export interface InspectionData {

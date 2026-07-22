@@ -18,6 +18,7 @@ import { UserMenu } from '@/components/UserMenu';
 import { LoginPage } from '@/components/LoginPage';
 import { useStoresHydrated } from '@/hooks/useStoresHydrated';
 import { usePersistedState } from '@/hooks/usePersistedState';
+import { getSubPartsForPhoto, photoShouldBeInPartsTable, getDisplayPn, getOrphanSubParts, photoHasSubPartData } from '@/lib/partsUtils';
 import { 
   generateAnalysisEmailBody, 
   generateConclusionEmailBody, 
@@ -27,7 +28,8 @@ import {
 } from '@/lib/emailUtils';
 import { 
   exportPartsTableToExcelHome, 
-  exportPartsTableToExcelInspecao 
+  exportPartsTableToExcelInspecao,
+  exportSubPartsToExcel
 } from '@/lib/excelExport';
 import { 
   Trash2, Plus, Download, Upload, Settings, 
@@ -368,6 +370,7 @@ function PhotoOptionsDialog({
 // Componente para a seção de peças adicionais
 function AdditionalPartsSection({
   parentPn,
+  photoId,
   additionalParts,
   onAddPart,
   onRemovePart,
@@ -375,6 +378,7 @@ function AdditionalPartsSection({
   t,
 }: {
   parentPn: string;
+  photoId?: string;
   additionalParts: AdditionalPart[];
   onAddPart: (part: AdditionalPart) => void;
   onRemovePart: (id: string) => void;
@@ -389,7 +393,9 @@ function AdditionalPartsSection({
   const [showExcelPaste, setShowExcelPaste] = useState(false);
   const [excelPasteData, setExcelPasteData] = useState('');
 
-  const photoAdditionalParts = additionalParts.filter(p => p.parentPn === parentPn);
+  const photoAdditionalParts = additionalParts.filter(p =>
+    photoId && p.photoId === photoId
+  );
 
   const handleAddPart = () => {
     if (!newPn.trim() || !newPartName.trim() || !newQuantity.trim()) return;
@@ -402,6 +408,7 @@ function AdditionalPartsSection({
       quantity: newQuantity.trim(),
       criticality: newCriticality,
       parentPn: parentPn,
+      photoId: photoId || undefined,
     });
 
     setNewPn('');
@@ -435,6 +442,7 @@ function AdditionalPartsSection({
           quantity: quantity,
           criticality: '',
           parentPn: parentPn,
+          photoId: photoId || undefined,
         });
       }
     });
@@ -464,14 +472,26 @@ function AdditionalPartsSection({
           <ListTree className="h-4 w-4" />
           {t('subparts.partsOf', { pn: parentPn || '...' })}
         </Label>
-        <Button
-          variant="ghost"
-          size="sm"
-          className="h-7 text-xs text-orange-600 hover:text-orange-800"
-          onClick={() => setShowExcelPaste(!showExcelPaste)}
-        >
-          {showExcelPaste ? 'Manual' : 'Colar Excel'}
-        </Button>
+        <div className="flex items-center gap-1">
+          {photoAdditionalParts.length > 0 && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 text-xs text-green-600 hover:text-green-800"
+              onClick={() => exportSubPartsToExcel(photoAdditionalParts, parentPn)}
+            >
+              <FileSpreadsheet className="h-3 w-3 mr-1" /> Baixar Excel
+            </Button>
+          )}
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-7 text-xs text-orange-600 hover:text-orange-800"
+            onClick={() => setShowExcelPaste(!showExcelPaste)}
+          >
+            {showExcelPaste ? 'Manual' : 'Colar Excel'}
+          </Button>
+        </div>
       </div>
       
       {/* Excel Paste Mode */}
@@ -1805,21 +1825,13 @@ function HomeContent({ reportId, onRegenerateId }: { reportId: string; onRegener
         }
         // Import categories with all photos and additional parts
         if (data.categories && Array.isArray(data.categories)) {
-          // Fix sub-part associations: if sub-part has parentPn but photo has no PN, set it
+          // Fix sub-part associations: set photoId on sub-parts
           data.categories.forEach((cat: any) => {
             if (cat.additionalParts && cat.additionalParts.length > 0) {
-              const subPartsByParent = new Map<string, any[]>();
               cat.additionalParts.forEach((ap: any) => {
                 if (ap.parentPn) {
-                  if (!subPartsByParent.has(ap.parentPn)) subPartsByParent.set(ap.parentPn, []);
-                  subPartsByParent.get(ap.parentPn)!.push(ap);
-                }
-              });
-              subPartsByParent.forEach((subs, parentPn) => {
-                let matchedPhoto = cat.photos.find((p: any) => p.pn === parentPn);
-                if (!matchedPhoto) {
-                  matchedPhoto = cat.photos.find((p: any) => !p.pn);
-                  if (matchedPhoto) matchedPhoto.pn = parentPn;
+                  const match = cat.photos.find((p: any) => p.pn === ap.parentPn);
+                  if (match) ap.photoId = match.id;
                 }
               });
             }
@@ -1830,11 +1842,9 @@ function HomeContent({ reportId, onRegenerateId }: { reportId: string; onRegener
           const expandMap: Record<string, boolean> = {};
           data.categories.forEach((cat: any) => {
             if (cat.additionalParts && cat.additionalParts.length > 0) {
-              const parentPns = new Set(cat.additionalParts.map((p: any) => p.parentPn).filter(Boolean));
               cat.photos.forEach((photo: any) => {
-                if (parentPns.has(photo.pn)) {
-                  expandMap[`${cat.id}-${photo.id}`] = true;
-                }
+                const hasSub = photoHasSubPartData(photo, cat.additionalParts);
+                if (hasSub) expandMap[`${cat.id}-${photo.id}`] = true;
               });
             }
           });
@@ -2287,11 +2297,11 @@ function HomeContent({ reportId, onRegenerateId }: { reportId: string; onRegener
                                 </Select>
                               </div>
                               <div className="flex items-center gap-2 p-2 bg-amber-100 rounded-lg border-2 border-amber-400">
-                                <Checkbox id={`subparts-home-${category.id}-${photo.id}`} checked={showAdditionalParts[`${category.id}-${photo.id}`] || category.additionalParts.filter(ap => ap.parentPn && ap.parentPn === photo.pn && (ap.pn || ap.partName)).length > 0} onCheckedChange={(checked) => setShowAdditionalParts(prev => ({ ...prev, [`${category.id}-${photo.id}`]: !!checked }))} className="border-amber-600 data-[state=checked]:bg-amber-500" />
+                                <Checkbox id={`subparts-home-${category.id}-${photo.id}`} checked={showAdditionalParts[`${category.id}-${photo.id}`] || photoHasSubPartData(photo, category.additionalParts)} onCheckedChange={(checked) => setShowAdditionalParts(prev => ({ ...prev, [`${category.id}-${photo.id}`]: !!checked }))} className="border-amber-600 data-[state=checked]:bg-amber-500" />
                                 <Label htmlFor={`subparts-home-${category.id}-${photo.id}`} className="text-sm font-bold text-amber-800 cursor-pointer flex items-center gap-1"><ListTree className="h-4 w-4" /> {t('subparts.title')}</Label>
                               </div>
-                              {(showAdditionalParts[`${category.id}-${photo.id}`] || category.additionalParts.filter(ap => ap.parentPn && ap.parentPn === photo.pn && (ap.pn || ap.partName)).length > 0) && (
-                                <AdditionalPartsSection parentPn={photo.pn} additionalParts={category.additionalParts} onAddPart={(part) => addAdditionalPartToCategory(category.id, part)} onRemovePart={(id) => removeAdditionalPartFromCategory(category.id, id)} t={t} />
+                              {(showAdditionalParts[`${category.id}-${photo.id}`] || photoHasSubPartData(photo, category.additionalParts)) && (
+                                <AdditionalPartsSection parentPn={photo.pn} photoId={photo.id} additionalParts={category.additionalParts} onAddPart={(part) => addAdditionalPartToCategory(category.id, part)} onRemovePart={(id) => removeAdditionalPartFromCategory(category.id, id)} t={t} />
                               )}
                             </div>
                             <div className="relative h-40 bg-gray-200 flex items-center justify-center gap-1 cursor-pointer hover:bg-gray-300 transition-colors">
@@ -2418,10 +2428,10 @@ function HomeContent({ reportId, onRegenerateId }: { reportId: string; onRegener
                 <table className="w-full min-w-[600px]">
                   <thead><tr className="bg-black text-white"><th className="p-2 md:p-3 text-left text-sm">{t('partsTable.pnSerial')}</th><th className="p-2 md:p-3 text-left text-sm">{t('partsTable.partName')}</th><th className="p-2 md:p-3 text-left text-sm">{t('partsTable.qty')}</th><th className="p-2 md:p-3 text-left text-sm">{t('partsTable.criticality')}</th><th className="p-2 md:p-3 text-left text-sm">{t('partsTable.type')}</th></tr></thead>
                   <tbody>
-                    {categories.flatMap(cat => cat.photos.filter(p => p.pn).map(photo => ({ photo, categoryId: cat.id }))).map(({ photo, categoryId }) => (
+                    {categories.flatMap(cat => cat.photos.filter(p => photoShouldBeInPartsTable(p, cat.additionalParts)).map(photo => ({ photo, categoryId: cat.id, catAddParts: cat.additionalParts }))).map(({ photo, categoryId, catAddParts }) => (
                       <React.Fragment key={photo.id}>
                         <tr className="border-b hover:bg-orange-50">
-                          <td className="p-2 md:p-3 font-semibold text-sm">{photo.pn}{photo.serialNumber && <span className="text-gray-500 font-normal ml-1">({photo.serialNumber})</span>}</td>
+                          <td className="p-2 md:p-3 font-semibold text-sm">{getDisplayPn(photo, catAddParts)}{photo.serialNumber && <span className="text-gray-500 font-normal ml-1">({photo.serialNumber})</span>}</td>
                           <td className="p-2 md:p-3 text-sm">{photo.partName || '-'}</td>
                           <td className="p-2 md:p-3 text-sm">{photo.quantity || '-'}</td>
                           <td className="p-2 md:p-3">
@@ -2432,7 +2442,7 @@ function HomeContent({ reportId, onRegenerateId }: { reportId: string; onRegener
                           </td>
                           <td className="p-2 md:p-3"><Badge variant="outline" className="text-xs">{t('partsTable.main')}</Badge></td>
                         </tr>
-                        {categories.find(c => c.id === categoryId)?.additionalParts.filter(ap => ap.parentPn === photo.pn).map((subPart) => (
+                        {getSubPartsForPhoto(photo, catAddParts).map((subPart) => (
                           <tr key={subPart.id} className="border-b bg-orange-50/50 hover:bg-orange-100/50">
                             <td className="p-2 md:p-3 pl-6 text-orange-700 text-sm"><span className="mr-1">└─</span>{subPart.pn}{subPart.serialNumber && <span className="text-gray-500 ml-1">({subPart.serialNumber})</span>}</td>
                             <td className="p-2 md:p-3 text-gray-600 italic text-sm">{subPart.partName}</td>
@@ -2447,6 +2457,21 @@ function HomeContent({ reportId, onRegenerateId }: { reportId: string; onRegener
                           </tr>
                         ))}
                       </React.Fragment>
+                    ))}
+                    {/* Orphan sub-parts (not associated with any photo) */}
+                    {categories.flatMap(cat => getOrphanSubParts(cat.photos, cat.additionalParts)).map((orphanPart) => (
+                      <tr key={orphanPart.id} className="border-b bg-gray-50">
+                        <td className="p-2 md:p-3 text-sm">{orphanPart.pn}{orphanPart.serialNumber && <span className="text-gray-500 ml-1">({orphanPart.serialNumber})</span>}</td>
+                        <td className="p-2 md:p-3 text-sm">{orphanPart.partName}</td>
+                        <td className="p-2 md:p-3 text-sm">{orphanPart.quantity}</td>
+                        <td className="p-2 md:p-3">
+                          {orphanPart.criticality === 'Alta' && <Badge className="bg-red-500 text-white text-xs">Alta</Badge>}
+                          {orphanPart.criticality === 'Média' && <Badge className="bg-yellow-500 text-white text-xs">Média</Badge>}
+                          {orphanPart.criticality === 'Baixa' && <Badge className="bg-green-500 text-white text-xs">Baixa</Badge>}
+                          {!orphanPart.criticality && '-'}
+                        </td>
+                        <td className="p-2 md:p-3"><Badge variant="outline" className="text-xs text-gray-500">{t('partsTable.main')}</Badge></td>
+                      </tr>
                     ))}
                   </tbody>
                 </table>
@@ -2863,20 +2888,13 @@ function InspecaoContent({ reportId, onRegenerateId }: { reportId: string; onReg
         }
         // Import photos with all data including imageData
         if (data.photos && Array.isArray(data.photos)) {
-          // Fix sub-part associations: if sub-part has parentPn but photo has no PN, set it
+          // Fix sub-part associations: set photoId on sub-parts
           if (data.additionalParts && Array.isArray(data.additionalParts)) {
-            const subPartsByParent = new Map<string, any[]>();
+            const importedPhotos = data.photos || [];
             data.additionalParts.forEach((ap: any) => {
               if (ap.parentPn) {
-                if (!subPartsByParent.has(ap.parentPn)) subPartsByParent.set(ap.parentPn, []);
-                subPartsByParent.get(ap.parentPn)!.push(ap);
-              }
-            });
-            subPartsByParent.forEach((subs, parentPn) => {
-              let matchedPhoto = data.photos.find((p: any) => p.pn === parentPn);
-              if (!matchedPhoto) {
-                matchedPhoto = data.photos.find((p: any) => !p.pn);
-                if (matchedPhoto) matchedPhoto.pn = parentPn;
+                const match = importedPhotos.find((p: any) => p.pn === ap.parentPn);
+                if (match) ap.photoId = match.id;
               }
             });
           }
@@ -2888,11 +2906,9 @@ function InspecaoContent({ reportId, onRegenerateId }: { reportId: string; onReg
           // Auto-expand sub-parts sections for photos that have them
           const importedPhotos = data.photos || photos;
           const expandMap: Record<string, boolean> = {};
-          const parentPns = new Set(data.additionalParts.map((p: any) => p.parentPn).filter(Boolean));
           importedPhotos.forEach((photo: any) => {
-            if (parentPns.has(photo.pn)) {
-              expandMap[photo.id] = true;
-            }
+            const hasSub = photoHasSubPartData(photo, data.additionalParts);
+            if (hasSub) expandMap[photo.id] = true;
           });
           if (Object.keys(expandMap).length > 0) {
             setShowAdditionalParts(prev => ({ ...prev, ...expandMap }));
@@ -3549,11 +3565,11 @@ function InspecaoContent({ reportId, onRegenerateId }: { reportId: string; onReg
                     </Select>
                   </div>
                   <div className="flex items-center gap-2 p-2 bg-amber-100 rounded-lg border-2 border-amber-400">
-                    <Checkbox id={`subparts-insp-${photo.id}`} checked={showAdditionalParts[photo.id] || additionalParts.filter(ap => ap.parentPn && ap.parentPn === photo.pn && (ap.pn || ap.partName)).length > 0} onCheckedChange={(checked) => setShowAdditionalParts(prev => ({ ...prev, [photo.id]: !!checked }))} className="border-amber-600 data-[state=checked]:bg-amber-500" />
+                    <Checkbox id={`subparts-insp-${photo.id}`} checked={showAdditionalParts[photo.id] || photoHasSubPartData(photo, additionalParts)} onCheckedChange={(checked) => setShowAdditionalParts(prev => ({ ...prev, [photo.id]: !!checked }))} className="border-amber-600 data-[state=checked]:bg-amber-500" />
                     <Label htmlFor={`subparts-insp-${photo.id}`} className="text-sm font-bold text-amber-800 cursor-pointer flex items-center gap-1"><ListTree className="h-4 w-4" /> {t('subparts.title')}</Label>
                   </div>
-                  {(showAdditionalParts[photo.id] || additionalParts.filter(ap => ap.parentPn && ap.parentPn === photo.pn && (ap.pn || ap.partName)).length > 0) && (
-                    <AdditionalPartsSection parentPn={photo.pn} additionalParts={additionalParts} onAddPart={(part) => addAdditionalPart(part)} onRemovePart={(id) => removeAdditionalPart(id)} t={t} />
+                  {(showAdditionalParts[photo.id] || photoHasSubPartData(photo, additionalParts)) && (
+                    <AdditionalPartsSection parentPn={photo.pn} photoId={photo.id} additionalParts={additionalParts} onAddPart={(part) => addAdditionalPart(part)} onRemovePart={(id) => removeAdditionalPart(id)} t={t} />
                   )}
                 </div>
                 {/* Área de foto(s) - 1 ou 2 lado a lado */}
@@ -3680,10 +3696,10 @@ function InspecaoContent({ reportId, onRegenerateId }: { reportId: string; onReg
                 <table className="w-full min-w-[600px]">
                   <thead><tr className="bg-black text-white"><th className="p-2 md:p-3 text-left text-sm">{t('partsTable.pnSerial')}</th><th className="p-2 md:p-3 text-left text-sm">{t('partsTable.partName')}</th><th className="p-2 md:p-3 text-left text-sm">{t('partsTable.qty')}</th><th className="p-2 md:p-3 text-left text-sm">{t('partsTable.criticality')}</th><th className="p-2 md:p-3 text-left text-sm">{t('partsTable.type')}</th></tr></thead>
                   <tbody>
-                    {photos.filter(p => p.pn).map((photo) => (
+                    {photos.filter(p => photoShouldBeInPartsTable(p, additionalParts)).map((photo) => (
                       <React.Fragment key={photo.id}>
                         <tr className="border-b hover:bg-orange-50">
-                          <td className="p-2 md:p-3 font-semibold text-sm">{photo.pn}{photo.serialNumber && <span className="text-gray-500 font-normal ml-1">({photo.serialNumber})</span>}</td>
+                          <td className="p-2 md:p-3 font-semibold text-sm">{getDisplayPn(photo, additionalParts)}{photo.serialNumber && <span className="text-gray-500 font-normal ml-1">({photo.serialNumber})</span>}</td>
                           <td className="p-2 md:p-3 text-sm">{photo.partName || '-'}</td>
                           <td className="p-2 md:p-3 text-sm">{photo.quantity || '-'}</td>
                           <td className="p-2 md:p-3">
@@ -3694,7 +3710,7 @@ function InspecaoContent({ reportId, onRegenerateId }: { reportId: string; onReg
                           </td>
                           <td className="p-2 md:p-3"><Badge variant="outline" className="text-xs">{t('partsTable.main')}</Badge></td>
                         </tr>
-                        {additionalParts.filter(ap => ap.parentPn === photo.pn).map((subPart) => (
+                        {getSubPartsForPhoto(photo, additionalParts).map((subPart) => (
                           <tr key={subPart.id} className="border-b bg-orange-50/50 hover:bg-orange-100/50">
                             <td className="p-2 md:p-3 pl-6 text-orange-700 text-sm"><span className="mr-1">└─</span>{subPart.pn}{subPart.serialNumber && <span className="text-gray-500 ml-1">({subPart.serialNumber})</span>}</td>
                             <td className="p-2 md:p-3 text-gray-600 italic text-sm">{subPart.partName}</td>
@@ -3709,6 +3725,21 @@ function InspecaoContent({ reportId, onRegenerateId }: { reportId: string; onReg
                           </tr>
                         ))}
                       </React.Fragment>
+                    ))}
+                    {/* Orphan sub-parts (not associated with any photo) */}
+                    {getOrphanSubParts(photos, additionalParts).map((orphanPart) => (
+                      <tr key={orphanPart.id} className="border-b bg-gray-50">
+                        <td className="p-2 md:p-3 text-sm">{orphanPart.pn}{orphanPart.serialNumber && <span className="text-gray-500 ml-1">({orphanPart.serialNumber})</span>}</td>
+                        <td className="p-2 md:p-3 text-sm">{orphanPart.partName}</td>
+                        <td className="p-2 md:p-3 text-sm">{orphanPart.quantity}</td>
+                        <td className="p-2 md:p-3">
+                          {orphanPart.criticality === 'Alta' && <Badge className="bg-red-500 text-white text-xs">Alta</Badge>}
+                          {orphanPart.criticality === 'Média' && <Badge className="bg-yellow-500 text-white text-xs">Média</Badge>}
+                          {orphanPart.criticality === 'Baixa' && <Badge className="bg-green-500 text-white text-xs">Baixa</Badge>}
+                          {!orphanPart.criticality && '-'}
+                        </td>
+                        <td className="p-2 md:p-3"><Badge variant="outline" className="text-xs text-gray-500">{t('partsTable.main')}</Badge></td>
+                      </tr>
                     ))}
                   </tbody>
                 </table>

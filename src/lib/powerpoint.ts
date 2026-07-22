@@ -1,6 +1,7 @@
 import pptxgen from 'pptxgenjs';
 import { saveAs } from 'file-saver';
 import type { InspectionData, PhotoData, AdditionalPart, PhotoCategory } from '@/types/report';
+import { getSubPartsForPhoto, photoShouldBeInPartsTable, getDisplayPn, getOrphanSubParts } from './partsUtils';
 import { t, type Language } from './translations';
 import { coverCropImage, maybeCoverCropImage, getImageInfo } from './coverCrop';
 
@@ -894,33 +895,40 @@ function generatePartsTableSlides(
   language: Language
 ) {
   const isTranslated = language !== 'pt';
-  // Build photo ref map (same numbering as generatePhotoSlides)
+  // Build photo ref maps (same numbering as generatePhotoSlides)
   const photosWithImages = photos.filter(p => p.imageData);
-  const photoRefMap = new Map<string, string>();
+  const photoRefMap = new Map<string, string>();   // PN → photo number
+  const photoIdRefMap = new Map<string, string>();  // photo ID → photo number
   photosWithImages.forEach((p, idx) => {
-    photoRefMap.set(p.pn, String(idx + 1));
+    if (p.pn) photoRefMap.set(p.pn, String(idx + 1));
+    photoIdRefMap.set(p.id, String(idx + 1));
   });
 
   // Build hierarchical parts structure
   const partRows: PartRow[] = [];
   
-  // Process each main part and its sub-parts
+  // Process each photo that should be in the table (has PN or has sub-parts)
   photos
-    .filter(p => p.pn)
+    .filter(p => photoShouldBeInPartsTable(p, additionalParts))
     .forEach(photo => {
+      const displayPn = getDisplayPn(photo, additionalParts);
+      const photoRef = photo.pn
+        ? photoRefMap.get(photo.pn)
+        : photoIdRefMap.get(photo.id);
+      
       // Add main part
       partRows.push({
-        pn: photo.pn,
+        pn: displayPn,
         serialNumber: photo.serialNumber || '',
         partName: photo.partName || '-',
         quantity: photo.quantity || '-',
         isSubPart: false,
         indent: 0,
-        photoRef: photoRefMap.get(photo.pn),
+        photoRef,
       });
       
-      // Find and add all sub-parts for this main part
-      const subParts = additionalParts.filter(ap => ap.parentPn === photo.pn);
+      // Find and add all sub-parts for this photo
+      const subParts = getSubPartsForPhoto(photo, additionalParts);
       subParts.forEach(subPart => {
         partRows.push({
           pn: subPart.pn,
@@ -928,28 +936,26 @@ function generatePartsTableSlides(
           partName: subPart.partName,
           quantity: subPart.quantity,
           isSubPart: true,
-          parentPn: photo.pn,
+          parentPn: displayPn,
           indent: 1,
-          photoRef: photoRefMap.get(photo.pn),
+          photoRef,
         });
       });
     });
   
-  // Add any orphan additional parts (without a parent in the current photos)
-  const parentPns = new Set(photos.filter(p => p.pn).map(p => p.pn));
-  additionalParts
-    .filter(ap => !parentPns.has(ap.parentPn))
-    .forEach(orphanPart => {
-      partRows.push({
-        pn: orphanPart.pn,
-        serialNumber: orphanPart.serialNumber || '',
-        partName: orphanPart.partName,
-        quantity: orphanPart.quantity,
-        isSubPart: false,
-        parentPn: orphanPart.parentPn,
-        indent: 0,
-      });
+  // Add any orphan additional parts (not associated with any photo)
+  const orphanParts = getOrphanSubParts(photos, additionalParts);
+  orphanParts.forEach(orphanPart => {
+    partRows.push({
+      pn: orphanPart.pn,
+      serialNumber: orphanPart.serialNumber || '',
+      partName: orphanPart.partName,
+      quantity: orphanPart.quantity,
+      isSubPart: false,
+      parentPn: orphanPart.parentPn,
+      indent: 0,
     });
+  });
   
   if (partRows.length === 0) return;
   

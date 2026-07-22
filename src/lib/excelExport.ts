@@ -1,6 +1,7 @@
 // Excel Export Utility for Parts Table
 import * as XLSX from 'xlsx';
 import type { InspectionData, PhotoData, AdditionalPart, PhotoCategory } from '@/types/report';
+import { getSubPartsForPhoto, photoShouldBeInPartsTable, getDisplayPn, getOrphanSubParts } from './partsUtils';
 
 function sanitizeForFilename(text: string): string {
   return text
@@ -66,36 +67,48 @@ export function exportPartsTableToExcelHome(
   
   // Process all parts from all categories
   categories.forEach((category) => {
-    // Main parts
-    category.photos.filter(p => p.pn).forEach((photo) => {
+    // Photos that should appear in table (has PN or has sub-parts)
+    category.photos.filter(p => photoShouldBeInPartsTable(p, category.additionalParts)).forEach((photo) => {
       rows.push({
         Cliente: inspection.cliente || '-',
         Descrição: inspection.descricao || '-',
         Equipamento: inspection.tag || '-',
         Data: formatDate(inspection.data),
         Mês: getMonthName(inspection.data),
-        PN: photo.pn,
+        PN: getDisplayPn(photo, category.additionalParts),
         Quantidade: photo.quantity || '-',
         Criticidade: photo.criticality || '-',
         'Nome da Peça': photo.partName || '-',
       });
       
-      // Sub-parts
-      category.additionalParts
-        .filter(ap => ap.parentPn === photo.pn)
-        .forEach((subPart) => {
-          rows.push({
-            Cliente: inspection.cliente || '-',
-            Descrição: inspection.descricao || '-',
-            Equipamento: inspection.tag || '-',
-            Data: formatDate(inspection.data),
-            Mês: getMonthName(inspection.data),
-            PN: subPart.pn,
-            Quantidade: subPart.quantity || '-',
-            Criticidade: subPart.criticality || '-',
-            'Nome da Peça': subPart.partName || '-',
-          });
+      // Sub-parts (matched by photoId)
+      getSubPartsForPhoto(photo, category.additionalParts).forEach((subPart) => {
+        rows.push({
+          Cliente: inspection.cliente || '-',
+          Descrição: inspection.descricao || '-',
+          Equipamento: inspection.tag || '-',
+          Data: formatDate(inspection.data),
+          Mês: getMonthName(inspection.data),
+          PN: subPart.pn,
+          Quantidade: subPart.quantity || '-',
+          Criticidade: subPart.criticality || '-',
+          'Nome da Peça': subPart.partName || '-',
         });
+      });
+    });
+    // Orphan sub-parts
+    getOrphanSubParts(category.photos, category.additionalParts).forEach((orphanPart) => {
+      rows.push({
+        Cliente: inspection.cliente || '-',
+        Descrição: inspection.descricao || '-',
+        Equipamento: inspection.tag || '-',
+        Data: formatDate(inspection.data),
+        Mês: getMonthName(inspection.data),
+        PN: orphanPart.pn,
+        Quantidade: orphanPart.quantity || '-',
+        Criticidade: orphanPart.criticality || '-',
+        'Nome da Peça': orphanPart.partName || '-',
+      });
     });
   });
   
@@ -111,36 +124,48 @@ export function exportPartsTableToExcelInspecao(
 ): void {
   const rows: ExcelPartRow[] = [];
   
-  // Main parts
-  photos.filter(p => p.pn).forEach((photo) => {
+  // Photos that should appear in table (has PN or has sub-parts)
+  photos.filter(p => photoShouldBeInPartsTable(p, additionalParts)).forEach((photo) => {
     rows.push({
       Cliente: inspection.cliente || '-',
       Descrição: inspection.descricao || '-',
       Equipamento: inspection.tag || '-',
       Data: formatDate(inspection.data),
       Mês: getMonthName(inspection.data),
-      PN: photo.pn,
+      PN: getDisplayPn(photo, additionalParts),
       Quantidade: photo.quantity || '-',
       Criticidade: photo.criticality || '-',
       'Nome da Peça': photo.partName || '-',
     });
     
-    // Sub-parts
-    additionalParts
-      .filter(ap => ap.parentPn === photo.pn)
-      .forEach((subPart) => {
-        rows.push({
-          Cliente: inspection.cliente || '-',
-          Descrição: inspection.descricao || '-',
-          Equipamento: inspection.tag || '-',
-          Data: formatDate(inspection.data),
-          Mês: getMonthName(inspection.data),
-          PN: subPart.pn,
-          Quantidade: subPart.quantity || '-',
-          Criticidade: subPart.criticality || '-',
-          'Nome da Peça': subPart.partName || '-',
-        });
+    // Sub-parts (matched by photoId)
+    getSubPartsForPhoto(photo, additionalParts).forEach((subPart) => {
+      rows.push({
+        Cliente: inspection.cliente || '-',
+        Descrição: inspection.descricao || '-',
+        Equipamento: inspection.tag || '-',
+        Data: formatDate(inspection.data),
+        Mês: getMonthName(inspection.data),
+        PN: subPart.pn,
+        Quantidade: subPart.quantity || '-',
+        Criticidade: subPart.criticality || '-',
+        'Nome da Peça': subPart.partName || '-',
       });
+    });
+  });
+  // Orphan sub-parts
+  getOrphanSubParts(photos, additionalParts).forEach((orphanPart) => {
+    rows.push({
+      Cliente: inspection.cliente || '-',
+      Descrição: inspection.descricao || '-',
+      Equipamento: inspection.tag || '-',
+      Data: formatDate(inspection.data),
+      Mês: getMonthName(inspection.data),
+      PN: orphanPart.pn,
+      Quantidade: orphanPart.quantity || '-',
+      Criticidade: orphanPart.criticality || '-',
+      'Nome da Peça': orphanPart.partName || '-',
+    });
   });
   
   generateExcelFile(rows, inspection, reportId);
@@ -180,5 +205,42 @@ function generateExcelFile(rows: ExcelPartRow[], inspection: InspectionData, rep
   const filename = `Tabela_Pecas_${tag}_${reportId || ''}_${date}.xlsx`.replace(/__+/g, '_');
   
   // Write and download
+  XLSX.writeFile(wb, filename);
+}
+
+// Export sub-parts to Excel in the same layout used for paste input
+// Format: Part No. | Q'ty | Part Name (tab-separated, one per row)
+export function exportSubPartsToExcel(
+  subParts: AdditionalPart[],
+  parentPn?: string
+): void {
+  if (subParts.length === 0) {
+    alert('Não há sub-peças para exportar.');
+    return;
+  }
+
+  const rows: { "Part No.": string; "Q'ty": string; "Part Name": string }[] =
+    subParts.map(part => ({
+      'Part No.': part.pn,
+      "Q'ty": part.quantity || '',
+      'Part Name': part.partName || '',
+    }));
+
+  const wb = XLSX.utils.book_new();
+  const ws = XLSX.utils.json_to_sheet(rows);
+
+  // Set column widths matching the input layout
+  ws['!cols'] = [
+    { wch: 20 }, // Part No.
+    { wch: 8 },  // Q'ty
+    { wch: 40 }, // Part Name
+  ];
+
+  XLSX.utils.book_append_sheet(wb, ws, 'Sub-peças');
+
+  const parent = parentPn ? sanitizeForFilename(parentPn) : 'subpecas';
+  const date = new Date().toISOString().split('T')[0];
+  const filename = `Subpecas_${parent}_${date}.xlsx`.replace(/__+/g, '_');
+
   XLSX.writeFile(wb, filename);
 }
