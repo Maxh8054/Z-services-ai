@@ -18,7 +18,7 @@ import { UserMenu } from '@/components/UserMenu';
 import { LoginPage } from '@/components/LoginPage';
 import { useStoresHydrated } from '@/hooks/useStoresHydrated';
 import { usePersistedState } from '@/hooks/usePersistedState';
-import { getSubPartsForPhoto, photoShouldBeInPartsTable, getDisplayPn, getOrphanSubParts, photoHasSubPartData } from '@/lib/partsUtils';
+import { getSubPartsForPhoto, photoShouldBeInPartsTable, getDisplayPn, photoHasSubPartData } from '@/lib/partsUtils';
 import { 
   generateAnalysisEmailBody, 
   generateConclusionEmailBody, 
@@ -2458,21 +2458,6 @@ function HomeContent({ reportId, onRegenerateId }: { reportId: string; onRegener
                         ))}
                       </React.Fragment>
                     ))}
-                    {/* Orphan sub-parts (not associated with any photo) */}
-                    {categories.flatMap(cat => getOrphanSubParts(cat.photos, cat.additionalParts)).map((orphanPart) => (
-                      <tr key={orphanPart.id} className="border-b bg-gray-50">
-                        <td className="p-2 md:p-3 text-sm">{orphanPart.pn}{orphanPart.serialNumber && <span className="text-gray-500 ml-1">({orphanPart.serialNumber})</span>}</td>
-                        <td className="p-2 md:p-3 text-sm">{orphanPart.partName}</td>
-                        <td className="p-2 md:p-3 text-sm">{orphanPart.quantity}</td>
-                        <td className="p-2 md:p-3">
-                          {orphanPart.criticality === 'Alta' && <Badge className="bg-red-500 text-white text-xs">Alta</Badge>}
-                          {orphanPart.criticality === 'Média' && <Badge className="bg-yellow-500 text-white text-xs">Média</Badge>}
-                          {orphanPart.criticality === 'Baixa' && <Badge className="bg-green-500 text-white text-xs">Baixa</Badge>}
-                          {!orphanPart.criticality && '-'}
-                        </td>
-                        <td className="p-2 md:p-3"><Badge variant="outline" className="text-xs text-gray-500">{t('partsTable.main')}</Badge></td>
-                      </tr>
-                    ))}
                   </tbody>
                 </table>
               </div>
@@ -3725,21 +3710,6 @@ function InspecaoContent({ reportId, onRegenerateId }: { reportId: string; onReg
                           </tr>
                         ))}
                       </React.Fragment>
-                    ))}
-                    {/* Orphan sub-parts (not associated with any photo) */}
-                    {getOrphanSubParts(photos, additionalParts).map((orphanPart) => (
-                      <tr key={orphanPart.id} className="border-b bg-gray-50">
-                        <td className="p-2 md:p-3 text-sm">{orphanPart.pn}{orphanPart.serialNumber && <span className="text-gray-500 ml-1">({orphanPart.serialNumber})</span>}</td>
-                        <td className="p-2 md:p-3 text-sm">{orphanPart.partName}</td>
-                        <td className="p-2 md:p-3 text-sm">{orphanPart.quantity}</td>
-                        <td className="p-2 md:p-3">
-                          {orphanPart.criticality === 'Alta' && <Badge className="bg-red-500 text-white text-xs">Alta</Badge>}
-                          {orphanPart.criticality === 'Média' && <Badge className="bg-yellow-500 text-white text-xs">Média</Badge>}
-                          {orphanPart.criticality === 'Baixa' && <Badge className="bg-green-500 text-white text-xs">Baixa</Badge>}
-                          {!orphanPart.criticality && '-'}
-                        </td>
-                        <td className="p-2 md:p-3"><Badge variant="outline" className="text-xs text-gray-500">{t('partsTable.main')}</Badge></td>
-                      </tr>
                     ))}
                   </tbody>
                 </table>

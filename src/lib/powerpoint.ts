@@ -1,7 +1,7 @@
 import pptxgen from 'pptxgenjs';
 import { saveAs } from 'file-saver';
 import type { InspectionData, PhotoData, AdditionalPart, PhotoCategory } from '@/types/report';
-import { getSubPartsForPhoto, photoShouldBeInPartsTable, getDisplayPn, getOrphanSubParts } from './partsUtils';
+import { getSubPartsForPhoto, photoShouldBeInPartsTable, getDisplayPn } from './partsUtils';
 import { t, type Language } from './translations';
 import { coverCropImage, maybeCoverCropImage, getImageInfo } from './coverCrop';
 
@@ -942,20 +942,6 @@ function generatePartsTableSlides(
         });
       });
     });
-  
-  // Add any orphan additional parts (not associated with any photo)
-  const orphanParts = getOrphanSubParts(photos, additionalParts);
-  orphanParts.forEach(orphanPart => {
-    partRows.push({
-      pn: orphanPart.pn,
-      serialNumber: orphanPart.serialNumber || '',
-      partName: orphanPart.partName,
-      quantity: orphanPart.quantity,
-      isSubPart: false,
-      parentPn: orphanPart.parentPn,
-      indent: 0,
-    });
-  });
   
   if (partRows.length === 0) return;
   

@@ -1,7 +1,7 @@
 // Excel Export Utility for Parts Table
 import * as XLSX from 'xlsx';
 import type { InspectionData, PhotoData, AdditionalPart, PhotoCategory } from '@/types/report';
-import { getSubPartsForPhoto, photoShouldBeInPartsTable, getDisplayPn, getOrphanSubParts } from './partsUtils';
+import { getSubPartsForPhoto, photoShouldBeInPartsTable, getDisplayPn } from './partsUtils';
 
 function sanitizeForFilename(text: string): string {
   return text
@@ -96,20 +96,6 @@ export function exportPartsTableToExcelHome(
         });
       });
     });
-    // Orphan sub-parts
-    getOrphanSubParts(category.photos, category.additionalParts).forEach((orphanPart) => {
-      rows.push({
-        Cliente: inspection.cliente || '-',
-        Descrição: inspection.descricao || '-',
-        Equipamento: inspection.tag || '-',
-        Data: formatDate(inspection.data),
-        Mês: getMonthName(inspection.data),
-        PN: orphanPart.pn,
-        Quantidade: orphanPart.quantity || '-',
-        Criticidade: orphanPart.criticality || '-',
-        'Nome da Peça': orphanPart.partName || '-',
-      });
-    });
   });
   
   generateExcelFile(rows, inspection, reportId);
@@ -151,20 +137,6 @@ export function exportPartsTableToExcelInspecao(
         Criticidade: subPart.criticality || '-',
         'Nome da Peça': subPart.partName || '-',
       });
-    });
-  });
-  // Orphan sub-parts
-  getOrphanSubParts(photos, additionalParts).forEach((orphanPart) => {
-    rows.push({
-      Cliente: inspection.cliente || '-',
-      Descrição: inspection.descricao || '-',
-      Equipamento: inspection.tag || '-',
-      Data: formatDate(inspection.data),
-      Mês: getMonthName(inspection.data),
-      PN: orphanPart.pn,
-      Quantidade: orphanPart.quantity || '-',
-      Criticidade: orphanPart.criticality || '-',
-      'Nome da Peça': orphanPart.partName || '-',
     });
   });
   
