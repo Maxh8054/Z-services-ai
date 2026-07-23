@@ -110,6 +110,7 @@ export const translations: Record<Language, Record<string, string>> = {
     'partsTable.main': 'Principal',
     'partsTable.subpart': 'Sub-peça',
     'partsTable.exportExcel': 'Exportar Excel',
+    'partsTable.partsCount': '{parts} peças e {subparts} sub-peças',
     
     // Conclusion
     'conclusion.title': 'Conclusão',
@@ -360,6 +361,7 @@ export const translations: Record<Language, Record<string, string>> = {
     'partsTable.main': 'Main',
     'partsTable.subpart': 'Sub-part',
     'partsTable.exportExcel': 'Export Excel',
+    'partsTable.partsCount': '{parts} parts and {subparts} sub-parts',
     
     // Conclusion
     'conclusion.title': 'Conclusion',
@@ -610,6 +612,7 @@ export const translations: Record<Language, Record<string, string>> = {
     'partsTable.main': 'メイン',
     'partsTable.subpart': 'サブ部品',
     'partsTable.exportExcel': 'Excelエクスポート',
+    'partsTable.partsCount': '{parts} 部品、{subparts} サブ部品',
     
     // Conclusion
     'conclusion.title': '結論',
@@ -797,6 +800,7 @@ export const translations: Record<Language, Record<string, string>> = {
     'partsTable.main': '主要',
     'partsTable.subpart': '子零件',
     'partsTable.exportExcel': '导出Excel',
+    'partsTable.partsCount': '{parts} 个零件和 {subparts} 个子零件',
     
     // Conclusion
     'conclusion.title': '结论',

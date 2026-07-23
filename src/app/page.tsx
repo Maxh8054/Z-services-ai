@@ -2411,62 +2411,77 @@ function HomeContent({ reportId, onRegenerateId }: { reportId: string; onRegener
           </div>
 
           {/* Parts Table - All parts from all categories */}
-          <Card className="mt-8">
-            <CardHeader className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
-              <CardTitle className="flex items-center gap-2"><Package className="h-5 w-5 text-orange-500" />{t('partsTable.title')}</CardTitle>
-              <Button 
-                size="sm" 
-                className="bg-green-600 hover:bg-green-700 h-10"
-                onClick={() => exportPartsTableToExcelHome(inspection, categories, reportId)}
-              >
-                <FileSpreadsheet className="h-4 w-4 mr-2" />
-                {t('partsTable.exportExcel')}
-              </Button>
-            </CardHeader>
-            <CardContent>
-              {/* Mobile scroll hint */}
-              <p className="md:hidden text-xs text-gray-500 mb-2 flex items-center gap-1">
-                ← {t('table.swipe')} →
-              </p>
-              <div className="overflow-x-auto -mx-4 px-4 md:mx-0 md:px-0 scroll-smooth" style={{ WebkitOverflowScrolling: 'touch' }}>
-                <table className="w-full min-w-[600px]">
-                  <thead><tr className="bg-black text-white"><th className="p-2 md:p-3 text-left text-sm">{t('partsTable.pnSerial')}</th><th className="p-2 md:p-3 text-left text-sm">{t('partsTable.partName')}</th><th className="p-2 md:p-3 text-left text-sm">{t('partsTable.qty')}</th><th className="p-2 md:p-3 text-left text-sm">{t('partsTable.criticality')}</th><th className="p-2 md:p-3 text-left text-sm">{t('partsTable.type')}</th></tr></thead>
-                  <tbody>
-                    {categories.flatMap(cat => cat.photos.filter(p => photoShouldBeInPartsTable(p, cat.additionalParts)).map(photo => ({ photo, categoryId: cat.id, catAddParts: cat.additionalParts }))).map(({ photo, categoryId, catAddParts }) => (
-                      <React.Fragment key={photo.id}>
-                        <tr className="border-b hover:bg-orange-50">
-                          <td className="p-2 md:p-3 font-semibold text-sm">{getDisplayPn(photo, catAddParts)}{photo.serialNumber && <span className="text-gray-500 font-normal ml-1">({photo.serialNumber})</span>}</td>
-                          <td className="p-2 md:p-3 text-sm">{photo.partName || '-'}</td>
-                          <td className="p-2 md:p-3 text-sm">{photo.quantity || '-'}</td>
-                          <td className="p-2 md:p-3">
-                            {photo.criticality === 'Alta' && <Badge className="bg-red-500 text-white text-xs">Alta</Badge>}
-                            {photo.criticality === 'Média' && <Badge className="bg-yellow-500 text-white text-xs">Média</Badge>}
-                            {photo.criticality === 'Baixa' && <Badge className="bg-green-500 text-white text-xs">Baixa</Badge>}
-                            {!photo.criticality && '-'}
-                          </td>
-                          <td className="p-2 md:p-3"><Badge variant="outline" className="text-xs">{t('partsTable.main')}</Badge></td>
-                        </tr>
-                        {getSubPartsForPhoto(photo, catAddParts).map((subPart) => (
-                          <tr key={subPart.id} className="border-b bg-orange-50/50 hover:bg-orange-100/50">
-                            <td className="p-2 md:p-3 pl-6 text-orange-700 text-sm"><span className="mr-1">└─</span>{subPart.pn}{subPart.serialNumber && <span className="text-gray-500 ml-1">({subPart.serialNumber})</span>}</td>
-                            <td className="p-2 md:p-3 text-gray-600 italic text-sm">{subPart.partName}</td>
-                            <td className="p-2 md:p-3 text-sm">{subPart.quantity}</td>
-                            <td className="p-2 md:p-3">
-                              {subPart.criticality === 'Alta' && <Badge className="bg-red-500 text-white text-xs">Alta</Badge>}
-                              {subPart.criticality === 'Média' && <Badge className="bg-yellow-500 text-white text-xs">Média</Badge>}
-                              {subPart.criticality === 'Baixa' && <Badge className="bg-green-500 text-white text-xs">Baixa</Badge>}
-                              {!subPart.criticality && '-'}
-                            </td>
-                            <td className="p-2 md:p-3"><Badge variant="secondary" className="text-xs bg-orange-100 text-orange-700">{t('partsTable.subpart')}</Badge></td>
-                          </tr>
+          {(() => {
+            const tablePhotos = categories.flatMap(cat => 
+              cat.photos.filter(p => photoShouldBeInPartsTable(p, cat.additionalParts))
+                .map(photo => ({ photo, catAddParts: cat.additionalParts }))
+            );
+            const partsCount = tablePhotos.length;
+            const subPartsCount = tablePhotos.reduce((sum, { photo, catAddParts }) => sum + getSubPartsForPhoto(photo, catAddParts).length, 0);
+            return (
+              <Card className="mt-8">
+                <CardHeader className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
+                  <div className="flex items-center gap-3 flex-wrap">
+                    <CardTitle className="flex items-center gap-2"><Package className="h-5 w-5 text-orange-500" />{t('partsTable.title')}</CardTitle>
+                    <Badge variant="secondary" className="text-xs bg-orange-100 text-orange-700 font-normal">
+                      {t('partsTable.partsCount', { parts: partsCount, subparts: subPartsCount })}
+                    </Badge>
+                  </div>
+                  <Button 
+                    size="sm" 
+                    className="bg-green-600 hover:bg-green-700 h-10"
+                    onClick={() => exportPartsTableToExcelHome(inspection, categories, reportId)}
+                  >
+                    <FileSpreadsheet className="h-4 w-4 mr-2" />
+                    {t('partsTable.exportExcel')}
+                  </Button>
+                </CardHeader>
+                <CardContent>
+                  {/* Mobile scroll hint */}
+                  <p className="md:hidden text-xs text-gray-500 mb-2 flex items-center gap-1">
+                    ← {t('table.swipe')} →
+                  </p>
+                  <div className="overflow-x-auto -mx-4 px-4 md:mx-0 md:px-0 scroll-smooth" style={{ WebkitOverflowScrolling: 'touch' }}>
+                    <table className="w-full min-w-[600px]">
+                      <thead><tr className="bg-black text-white"><th className="p-2 md:p-3 text-left text-sm">{t('partsTable.pnSerial')}</th><th className="p-2 md:p-3 text-left text-sm">{t('partsTable.partName')}</th><th className="p-2 md:p-3 text-left text-sm">{t('partsTable.qty')}</th><th className="p-2 md:p-3 text-left text-sm">{t('partsTable.criticality')}</th><th className="p-2 md:p-3 text-left text-sm">{t('partsTable.type')}</th></tr></thead>
+                      <tbody>
+                        {categories.flatMap(cat => cat.photos.filter(p => photoShouldBeInPartsTable(p, cat.additionalParts)).map(photo => ({ photo, categoryId: cat.id, catAddParts: cat.additionalParts }))).map(({ photo, categoryId, catAddParts }) => (
+                          <React.Fragment key={photo.id}>
+                            <tr className="border-b hover:bg-orange-50">
+                              <td className="p-2 md:p-3 font-semibold text-sm">{getDisplayPn(photo, catAddParts)}{photo.serialNumber && <span className="text-gray-500 font-normal ml-1">({photo.serialNumber})</span>}</td>
+                              <td className="p-2 md:p-3 text-sm">{photo.partName || '-'}</td>
+                              <td className="p-2 md:p-3 text-sm">{photo.quantity || '-'}</td>
+                              <td className="p-2 md:p-3">
+                                {photo.criticality === 'Alta' && <Badge className="bg-red-500 text-white text-xs">Alta</Badge>}
+                                {photo.criticality === 'Média' && <Badge className="bg-yellow-500 text-white text-xs">Média</Badge>}
+                                {photo.criticality === 'Baixa' && <Badge className="bg-green-500 text-white text-xs">Baixa</Badge>}
+                                {!photo.criticality && '-'}
+                              </td>
+                              <td className="p-2 md:p-3"><Badge variant="outline" className="text-xs">{t('partsTable.main')}</Badge></td>
+                            </tr>
+                            {getSubPartsForPhoto(photo, catAddParts).map((subPart) => (
+                              <tr key={subPart.id} className="border-b bg-orange-50/50 hover:bg-orange-100/50">
+                                <td className="p-2 md:p-3 pl-6 text-orange-700 text-sm"><span className="mr-1">└─</span>{subPart.pn}{subPart.serialNumber && <span className="text-gray-500 ml-1">({subPart.serialNumber})</span>}</td>
+                                <td className="p-2 md:p-3 text-gray-600 italic text-sm">{subPart.partName}</td>
+                                <td className="p-2 md:p-3 text-sm">{subPart.quantity}</td>
+                                <td className="p-2 md:p-3">
+                                  {subPart.criticality === 'Alta' && <Badge className="bg-red-500 text-white text-xs">Alta</Badge>}
+                                  {subPart.criticality === 'Média' && <Badge className="bg-yellow-500 text-white text-xs">Média</Badge>}
+                                  {subPart.criticality === 'Baixa' && <Badge className="bg-green-500 text-white text-xs">Baixa</Badge>}
+                                  {!subPart.criticality && '-'}
+                                </td>
+                                <td className="p-2 md:p-3"><Badge variant="secondary" className="text-xs bg-orange-100 text-orange-700">{t('partsTable.subpart')}</Badge></td>
+                              </tr>
+                            ))}
+                          </React.Fragment>
                         ))}
-                      </React.Fragment>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </CardContent>
-          </Card>
+                      </tbody>
+                    </table>
+                  </div>
+                </CardContent>
+              </Card>
+            );
+          })()}
 
           {/* Conclusion */}
           <Card className="mt-8">
@@ -3664,9 +3679,19 @@ function InspecaoContent({ reportId, onRegenerateId }: { reportId: string; onReg
             ))}
           </div>
 
+          {(() => {
+            const tablePhotos = photos.filter(p => photoShouldBeInPartsTable(p, additionalParts));
+            const partsCount = tablePhotos.length;
+            const subPartsCount = tablePhotos.reduce((sum, photo) => sum + getSubPartsForPhoto(photo, additionalParts).length, 0);
+            return (
           <Card className="mt-8">
             <CardHeader className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
-              <CardTitle className="flex items-center gap-2"><Package className="h-5 w-5 text-orange-500" />{t('partsTable.title')}</CardTitle>
+              <div className="flex items-center gap-3 flex-wrap">
+                <CardTitle className="flex items-center gap-2"><Package className="h-5 w-5 text-orange-500" />{t('partsTable.title')}</CardTitle>
+                <Badge variant="secondary" className="text-xs bg-orange-100 text-orange-700 font-normal">
+                  {t('partsTable.partsCount', { parts: partsCount, subparts: subPartsCount })}
+                </Badge>
+              </div>
               <Button 
                 size="sm" 
                 className="bg-green-600 hover:bg-green-700 h-10"
@@ -3720,6 +3745,8 @@ function InspecaoContent({ reportId, onRegenerateId }: { reportId: string; onReg
               </div>
             </CardContent>
           </Card>
+            );
+          })()}
 
           <Card className="mt-8">
             <CardHeader><CardTitle className="flex items-center gap-2"><Check className="h-5 w-5 text-orange-500" />{t('conclusion.title')}</CardTitle></CardHeader>
