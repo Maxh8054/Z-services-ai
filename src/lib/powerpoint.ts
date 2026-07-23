@@ -11,8 +11,7 @@ const PHOTO_LANDSCAPE_W = 4.8;
 const PHOTO_LANDSCAPE_H = 3.2;
 const PHOTO_PORTRAIT_W = 3.3;
 const PHOTO_PORTRAIT_H = 3.2;
-// When one slot is dual (side-by-side), it gets extra width
-const DUAL_SLOT_W = 5.7;  // wider slot for dual photo container
+// When one slot is dual (side-by-side), same width as any other container
 const DUAL_PHOTO_H = 3.2;
 const CONTAINER_GAP = 0.1;  // Gap between the two photo containers on a slide
 
@@ -293,13 +292,13 @@ async function generateCategorySlides(
       h2 = DUAL_PHOTO_H;
     } else if (isDual1) {
       // Photo 1 dual, photo 2 single
-      w1 = DUAL_SLOT_W;
+      w1 = PHOTO_LANDSCAPE_W;
       w2 = usableW - w1 - gap;
       h1 = DUAL_PHOTO_H;
       h2 = photo2 ? (photo2.editedImageData || photo2.imageData ? await getAspectRatioHeight(w2, photo2.editedImageData || photo2.imageData!) : PHOTO_LANDSCAPE_H) : PHOTO_LANDSCAPE_H;
     } else if (isDual2) {
       // Photo 1 single, photo 2 dual
-      w2 = DUAL_SLOT_W;
+      w2 = PHOTO_LANDSCAPE_W;
       w1 = usableW - w2 - gap;
       h1 = photo1 ? (photo1.editedImageData || photo1.imageData ? await getAspectRatioHeight(w1, photo1.editedImageData || photo1.imageData!) : PHOTO_LANDSCAPE_H) : PHOTO_LANDSCAPE_H;
       h2 = DUAL_PHOTO_H;
@@ -812,12 +811,12 @@ async function generatePhotoSlides(pptx: pptxgen, photos: PhotoData[], language:
       h1 = DUAL_PHOTO_H;
       h2 = DUAL_PHOTO_H;
     } else if (isDual1) {
-      w1 = DUAL_SLOT_W;
+      w1 = PHOTO_LANDSCAPE_W;
       w2 = usableW - w1 - gap;
       h1 = DUAL_PHOTO_H;
       h2 = photo2 ? (photo2.editedImageData || photo2.imageData ? await getAspectRatioHeight(w2, photo2.editedImageData || photo2.imageData!) : PHOTO_LANDSCAPE_H) : PHOTO_LANDSCAPE_H;
     } else if (isDual2) {
-      w2 = DUAL_SLOT_W;
+      w2 = PHOTO_LANDSCAPE_W;
       w1 = usableW - w2 - gap;
       h1 = photo1 ? (photo1.editedImageData || photo1.imageData ? await getAspectRatioHeight(w1, photo1.editedImageData || photo1.imageData!) : PHOTO_LANDSCAPE_H) : PHOTO_LANDSCAPE_H;
       h2 = DUAL_PHOTO_H;
@@ -866,7 +865,7 @@ async function addPhotoToSlide(
   const hasSecondaryPhoto = photo.secondaryImageData && photo.imageData;
   
   // Calculate photo widths
-  const dualGap = 0.2;  // Gap between primary and secondary photo
+  const dualGap = 0.05;  // Small gap between primary and secondary photo
   const photoWidth = hasSecondaryPhoto ? (w - dualGap) / 2 : w;
   
   // Photo info overlay (if PN exists)
