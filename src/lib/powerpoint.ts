@@ -865,8 +865,8 @@ async function addPhotoToSlide(
   const hasSecondaryPhoto = photo.secondaryImageData && photo.imageData;
   
   // Calculate photo widths
-  const dualGap = 0.02;  // Minimal gap between primary and secondary photo
-  const photoWidth = hasSecondaryPhoto ? (w - dualGap) / 2 : w;
+  const dualGap = 0;  // No gap between primary and secondary photo
+  const photoWidth = hasSecondaryPhoto ? w / 2 : w;
   
   // Photo info overlay (if PN exists)
   if (photo.pn) {
