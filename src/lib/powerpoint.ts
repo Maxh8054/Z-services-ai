@@ -7,13 +7,14 @@ import { coverCropImage, maybeCoverCropImage, getImageInfo } from './coverCrop';
 
 // Photo dimensions in inches
 const SLIDE_MARGIN = 0.15;  // Reduced lateral margin
-const PHOTO_LANDSCAPE_W = 4.4;
-const PHOTO_LANDSCAPE_H = 3.0;
-const PHOTO_PORTRAIT_W = 3.1;
-const PHOTO_PORTRAIT_H = 3.0;
+const PHOTO_LANDSCAPE_W = 4.8;
+const PHOTO_LANDSCAPE_H = 3.2;
+const PHOTO_PORTRAIT_W = 3.3;
+const PHOTO_PORTRAIT_H = 3.2;
 // When one slot is dual (side-by-side), it gets extra width
-const DUAL_SLOT_W = 5.6;  // wider slot for dual photo container
-const DUAL_PHOTO_H = 3.0;
+const DUAL_SLOT_W = 5.7;  // wider slot for dual photo container
+const DUAL_PHOTO_H = 3.2;
+const CONTAINER_GAP = 0.1;  // Gap between the two photo containers on a slide
 
 // Sanitize text for use in filenames
 function sanitizeForFilename(text: string): string {
@@ -248,8 +249,8 @@ async function getAspectRatioHeight(targetW: number, imgData: string): Promise<n
     const info = await getImageInfo(imgData);
     const ratio = info.height / info.width;
     const h = targetW * ratio;
-    // Clamp between 2.0 and 3.2 inches
-    return Math.max(2.0, Math.min(3.2, h));
+    // Clamp between 2.5 and 3.2 inches
+    return Math.max(2.5, Math.min(3.2, h));
   } catch {
     return PHOTO_LANDSCAPE_H;
   }
@@ -281,7 +282,7 @@ async function generateCategorySlides(
     // Calculate widths: dual photos get wider slots
     let w1: number, h1: number, w2: number, h2: number;
     const y = 1.35;
-    const gap = 0.2;
+    const gap = CONTAINER_GAP;
     const usableW = 10 - SLIDE_MARGIN * 2;
     
     if (isDual1 && isDual2) {
@@ -802,7 +803,7 @@ async function generatePhotoSlides(pptx: pptxgen, photos: PhotoData[], language:
     
     let w1: number, h1: number, w2: number, h2: number;
     const y = 1.35;
-    const gap = 0.2;
+    const gap = CONTAINER_GAP;
     const usableW = 10 - SLIDE_MARGIN * 2;
     
     if (isDual1 && isDual2) {
